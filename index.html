@@ -13,7 +13,7 @@
     .tab-btn { flex: 1; min-width: 80px; padding: 12px 5px; text-align: center; border: none; background: none; font-weight: 600; font-size: 0.8rem; color: #6b7280; cursor: pointer; white-space: nowrap; }
     .tab-btn.active { color: #2563eb; border-bottom: 3px solid #2563eb; }
 
-    .container { padding: 15px; max-width: 650px; margin: 0 auto; }
+    .container { padding: 15px; max-width: 700px; margin: 0 auto; }
     .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; }
     
     label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; margin-bottom: 4px; color: #374151; }
@@ -26,6 +26,7 @@
     .btn-add { background: #4f46e5; color: white; margin-top: 8px; width: 100%; }
     .btn-danger { background: #dc2626; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; }
     .btn-edit { background: #d97706; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; margin-right: 4px; }
+    .btn-view { background: #2563eb; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; margin-right: 4px; }
 
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
     .stat-card { background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -43,6 +44,10 @@
     .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .badge-sale { background: #dcfce7; color: #15803d; }
     .badge-purchase { background: #fee2e2; color: #b91c1c; }
+
+    /* Modal Overlay for Invoice View */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-card { background: white; width: 90%; max-width: 500px; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 85vh; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -52,8 +57,9 @@
   <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('sales', this)">Sales</button>
     <button class="tab-btn" onclick="switchTab('purchase', this)">Purchase</button>
+    <button class="tab-btn" onclick="switchTab('lookup', this)">Item Lookup</button>
     <button class="tab-btn" onclick="switchTab('accounts', this)">Ledger</button>
-    <button class="tab-btn" onclick="switchTab('history', this)">History</button>
+    <button class="tab-btn" onclick="switchTab('history', this)">Invoices</button>
     <button class="tab-btn" onclick="switchTab('stock', this)">Stock Summary</button>
   </div>
 
@@ -103,12 +109,28 @@
     <!-- PURCHASE ENTRY -->
     <div id="tab-purchase" class="tab-content hidden">
       <div class="card">
-        <h3>Add Purchase / Stock</h3>
-        <label>Supplier / Vendor Name</label>
-        <input type="text" id="p-supplier" placeholder="e.g. ABC Wholesalers">
+        <h3>Add Purchase Invoice</h3>
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1;">
+            <label>Invoice Number</label>
+            <input type="text" id="p-inv-num" placeholder="e.g. INV-1001">
+          </div>
+          <div style="flex: 1;">
+            <label>Supplier / Vendor Name</label>
+            <input type="text" id="p-supplier" placeholder="e.g. ABC Wholesalers">
+          </div>
+        </div>
 
-        <label>Paid Amount (₹)</label>
-        <input type="number" id="p-paid" value="0">
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1;">
+            <label>Paid Amount (₹)</label>
+            <input type="number" id="p-paid" value="0">
+          </div>
+          <div style="flex: 1;">
+            <label>Freight / Misc Charges (₹)</label>
+            <input type="number" id="p-misc" value="0" placeholder="Auto allocated">
+          </div>
+        </div>
 
         <hr style="margin-top:12px;">
 
@@ -140,24 +162,45 @@
           </div>
         </div>
 
-        <button class="btn btn-add" onclick="addItemToPurchaseCart()">+ Add Item to List</button>
+        <button class="btn btn-add" onclick="addItemToPurchaseCart()">+ Add Item to Bill</button>
 
         <div class="cart-list">
-          <b>Purchase Items:</b>
+          <b>Invoice Items:</b>
           <div id="p-cart-items"></div>
           <div style="text-align: right; margin-top: 8px; font-weight: bold;">
-            Total Bill: ₹<span id="p-grand-total">0</span>
+            Items Total: ₹<span id="p-sub-total">0</span> | Net Bill (+Misc): ₹<span id="p-grand-total">0</span>
           </div>
         </div>
 
-        <button class="btn btn-green" style="margin-top:15px;" onclick="submitFinalPurchase()">Save All Purchases</button>
+        <button class="btn btn-green" style="margin-top:15px;" onclick="submitFinalPurchase()">Save Purchase Invoice</button>
       </div>
     </div>
 
-    <!-- LEDGER -->
+    <!-- ITEM LOOKUP & DIRECTORY -->
+    <div id="tab-lookup" class="tab-content hidden">
+      <div class="card">
+        <h3>Item Rate & Stock Directory</h3>
+        <label>Search Item or Category</label>
+        <input type="text" placeholder="Search by name or category..." oninput="renderItemDirectory(this.value)">
+
+        <table style="margin-top: 15px;">
+          <thead>
+            <tr>
+              <th>Item / Category</th>
+              <th>Available Qty</th>
+              <th>Purchase Rate</th>
+              <th>Selling Price</th>
+            </tr>
+          </thead>
+          <tbody id="directory-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LEDGER & PARTY ADJUSTMENTS -->
     <div id="tab-accounts" class="tab-content hidden">
       <div class="card">
-        <h3>Accounts & Outstanding Balances</h3>
+        <h3>Party Ledger & Global Payments</h3>
         <label>Select Party Type</label>
         <select id="acc-type" onchange="renderPartyDropdown()">
           <option value="Customer">Customers</option>
@@ -168,33 +211,41 @@
         <select id="acc-party" onchange="renderPartyStatement()"></select>
 
         <div class="stat-card" style="margin-top:15px; background: #f0fdf4;">
-          <div>Outstanding Balance</div>
+          <div>Net Balance Due</div>
           <div class="stat-val text-red" id="party-balance">₹0</div>
+        </div>
+
+        <div style="background: #eef2ff; padding: 10px; border-radius: 6px; margin-top: 12px;">
+          <h4 style="font-size: 0.85rem; color: #374151;">Record Direct Payment / Adjustment</h4>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <input type="number" id="party-adjust-amount" placeholder="Amount (₹)">
+            <button class="btn btn-blue" style="width: auto; padding: 0 15px;" onclick="savePartyPayment()">Record Payment</button>
+          </div>
         </div>
 
         <table id="party-table" style="margin-top:15px;">
           <thead>
-            <tr><th>Date</th><th>Item</th><th>Total</th><th>Paid</th><th>Due</th></tr>
+            <tr><th>Date</th><th>Description / Inv</th><th>Total</th><th>Paid / Adj</th><th>Balance</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
 
-    <!-- TRANSACTION HISTORY (EDIT & DELETE) -->
+    <!-- INVOICE-WISE HISTORY -->
     <div id="tab-history" class="tab-content hidden">
       <div class="card">
-        <h3>Sales & Purchase Logs</h3>
+        <h3>Invoice History</h3>
         <table id="history-table">
           <thead>
-            <tr><th>Type</th><th>Party</th><th>Item</th><th>Total</th><th>Paid</th><th>Actions</th></tr>
+            <tr><th>Type</th><th>Inv # / Party</th><th>Bill Amt</th><th>Paid</th><th>Actions</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
 
-    <!-- STOCK SUMMARY -->
+    <!-- STOCK SUMMARY & CATEGORY BREAKDOWN -->
     <div id="tab-stock" class="tab-content hidden">
       <div class="stat-grid">
         <div class="stat-card">
@@ -208,6 +259,16 @@
       </div>
 
       <div class="card">
+        <h3>Category-Wise Stock Quantity</h3>
+        <table id="category-summary-table">
+          <thead>
+            <tr><th>Category</th><th>Total Available Stock</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
         <h3>Stock Movement Summary</h3>
         <input type="text" placeholder="Search item..." oninput="renderStockSummaryTable(this.value)">
         <table id="stock-summary-table">
@@ -215,8 +276,8 @@
             <tr>
               <th>Item</th>
               <th>Opening</th>
-              <th>Purchased</th>
-              <th>Sold</th>
+              <th>In</th>
+              <th>Out</th>
               <th>Closing</th>
               <th>Action</th>
             </tr>
@@ -228,18 +289,38 @@
 
   </div>
 
+  <!-- INVOICE DETAIL MODAL -->
+  <div id="invoice-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h3 id="modal-title" style="margin-bottom: 5px;">Invoice Details</h3>
+      <p id="modal-subtitle" style="font-size: 0.8rem; color: #6b7280; margin-bottom: 15px;"></p>
+      
+      <table id="modal-items-table">
+        <thead>
+          <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div style="margin-top: 15px; text-align: right; font-size: 0.85rem; line-height: 1.5;" id="modal-summary-box"></div>
+
+      <button class="btn btn-blue" style="margin-top: 15px;" onclick="closeInvoiceModal()">Close</button>
+    </div>
+  </div>
+
   <script>
     let db;
     let saleCart = [];
     let purchaseCart = [];
     let allItems = [];
 
-    const request = indexedDB.open("AimanStoreFinalV5", 1);
+    const request = indexedDB.open("AimanStoreFinalV6", 1);
 
     request.onupgradeneeded = function(e) {
       db = e.target.result;
       if (!db.objectStoreNames.contains("items")) db.createObjectStore("items", { keyPath: "name" });
       if (!db.objectStoreNames.contains("logs")) db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+      if (!db.objectStoreNames.contains("payments")) db.createObjectStore("payments", { keyPath: "id", autoIncrement: true });
     };
 
     request.onsuccess = function(e) {
@@ -259,6 +340,7 @@
       if(tabName === 'sales') loadItemsData();
       if(tabName === 'history') renderHistoryTable();
       if(tabName === 'accounts') renderPartyDropdown();
+      if(tabName === 'lookup') renderItemDirectory('');
     }
 
     function loadItemsData() {
@@ -307,7 +389,7 @@
       let grandTotal = 0;
       saleCart.forEach((item, idx) => {
         grandTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} = ₹${item.total}</div><button class="btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
+        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} @ ₹${item.rate} = ₹${item.total}</div><button class="btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
       });
       document.getElementById('s-grand-total').textContent = grandTotal;
     }
@@ -317,10 +399,13 @@
       if(saleCart.length === 0) return alert("Cart is empty!");
       let customer = document.getElementById('s-customer').value.trim() || 'Cash Customer';
       let paid = parseFloat(document.getElementById('s-paid').value) || 0;
+      let invNum = "SALE-" + Date.now().toString().slice(-6);
 
       let tx = db.transaction(["items", "logs"], "readwrite");
       let itemStore = tx.objectStore("items");
       let logStore = tx.objectStore("logs");
+
+      let totalBill = saleCart.reduce((a, b) => a + b.total, 0);
 
       saleCart.forEach(cartItem => {
         itemStore.get(cartItem.name).onsuccess = function(e) {
@@ -330,17 +415,16 @@
             itemStore.put(item);
           }
         };
+      });
 
-        logStore.add({
-          type: 'SALE',
-          party: customer,
-          item: cartItem.name,
-          qty: cartItem.qty,
-          rate: cartItem.rate,
-          total: cartItem.total,
-          paid: paid,
-          date: new Date().toLocaleDateString()
-        });
+      logStore.add({
+        invNum: invNum,
+        type: 'SALE',
+        party: customer,
+        items: saleCart,
+        total: totalBill,
+        paid: paid,
+        date: new Date().toLocaleDateString()
       });
 
       alert("Sale Recorded!");
@@ -353,13 +437,13 @@
 
     function addItemToPurchaseCart() {
       let name = document.getElementById('p-name').value.trim();
-      let category = document.getElementById('p-category').value.trim();
+      let category = document.getElementById('p-category').value.trim() || 'General';
       let opening = parseInt(document.getElementById('p-opening').value) || 0;
       let qty = parseInt(document.getElementById('p-qty').value) || 0;
       let cost = parseFloat(document.getElementById('p-cost').value) || 0;
       let sell = parseFloat(document.getElementById('p-sell').value) || 0;
 
-      if(!name) return alert("Enter item name.");
+      if(!name || qty <= 0) return alert("Enter item name and valid quantity.");
 
       purchaseCart.push({ name, category, opening, qty, cost, sell, total: qty * cost });
       renderPurchaseCart();
@@ -369,48 +453,89 @@
     function renderPurchaseCart() {
       let container = document.getElementById('p-cart-items');
       container.innerHTML = '';
-      let grandTotal = 0;
+      let itemsTotal = 0;
       purchaseCart.forEach((item, idx) => {
-        grandTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} = ₹${item.total}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
+        itemsTotal += item.total;
+        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> (${item.category}) x ${item.qty} @ ₹${item.cost} = ₹${item.total}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
       });
-      document.getElementById('p-grand-total').textContent = grandTotal;
+      
+      let misc = parseFloat(document.getElementById('p-misc').value) || 0;
+      document.getElementById('p-sub-total').textContent = itemsTotal;
+      document.getElementById('p-grand-total').textContent = itemsTotal + misc;
     }
 
     function submitFinalPurchase() {
       if(!db) return alert("Database loading... try again in a second.");
       if(purchaseCart.length === 0) return alert("No purchase items added!");
+      let invNum = document.getElementById('p-inv-num').value.trim() || "PUR-" + Date.now().toString().slice(-6);
       let supplier = document.getElementById('p-supplier').value.trim() || 'General Supplier';
       let paid = parseFloat(document.getElementById('p-paid').value) || 0;
+      let miscCharges = parseFloat(document.getElementById('p-misc').value) || 0;
+
+      let subTotal = purchaseCart.reduce((sum, item) => sum + item.total, 0);
+      let grandTotal = subTotal + miscCharges;
 
       let tx = db.transaction(["items", "logs"], "readwrite");
       let itemStore = tx.objectStore("items");
       let logStore = tx.objectStore("logs");
 
       purchaseCart.forEach(cartItem => {
+        let itemRatio = subTotal > 0 ? (cartItem.total / subTotal) : (1 / purchaseCart.length);
+        let allocatedMisc = miscCharges * itemRatio;
+        let effectiveCostPerUnit = (cartItem.total + allocatedMisc) / cartItem.qty;
+
         itemStore.get(cartItem.name).onsuccess = function(e) {
           let item = e.target.result || { name: cartItem.name, openingStock: cartItem.opening, purchasedQty: 0, soldQty: 0, category: cartItem.category };
           item.purchasedQty = (item.purchasedQty || 0) + cartItem.qty;
-          item.costPrice = cartItem.cost;
+          item.costPrice = parseFloat(effectiveCostPerUnit.toFixed(2));
           item.sellingPrice = cartItem.sell;
+          item.category = cartItem.category;
           itemStore.put(item);
         };
-
-        logStore.add({
-          type: 'PURCHASE',
-          party: supplier,
-          item: cartItem.name,
-          qty: cartItem.qty,
-          cost: cartItem.cost,
-          total: cartItem.total,
-          paid: paid,
-          date: new Date().toLocaleDateString()
-        });
       });
 
-      alert("Purchases Saved!");
+      logStore.add({
+        invNum: invNum,
+        type: 'PURCHASE',
+        party: supplier,
+        items: purchaseCart,
+        miscCharges: miscCharges,
+        total: grandTotal,
+        paid: paid,
+        date: new Date().toLocaleDateString()
+      });
+
+      alert("Purchase Invoice Saved with Pro-Rata Freight Allocation!");
       purchaseCart = [];
+      document.getElementById('p-inv-num').value = '';
+      document.getElementById('p-supplier').value = '';
+      document.getElementById('p-paid').value = 0;
+      document.getElementById('p-misc').value = 0;
       renderPurchaseCart();
+      loadItemsData();
+    }
+
+    function renderItemDirectory(query) {
+      if(!db) return;
+      let tbody = document.getElementById('directory-table-body');
+      tbody.innerHTML = '';
+
+      let filtered = allItems.filter(i => 
+        i.name.toLowerCase().includes(query.toLowerCase()) || 
+        (i.category && i.category.toLowerCase().includes(query.toLowerCase()))
+      );
+
+      filtered.forEach(item => {
+        let closing = (item.openingStock||0) + (item.purchasedQty||0) - (item.soldQty||0);
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
+          <td><b>${closing}</b></td>
+          <td>₹${item.costPrice || 0}</td>
+          <td>₹${item.sellingPrice || 0}</td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
 
     function renderPartyDropdown() {
@@ -439,9 +564,17 @@
       let partyName = document.getElementById('acc-party').value;
       if(!partyName) return;
 
-      let tx = db.transaction("logs", "readonly");
+      let tx = db.transaction(["logs", "payments"], "readonly");
+      let logs = [];
+      let payments = [];
+
       tx.objectStore("logs").getAll().onsuccess = function(e) {
-        let logs = e.target.result.filter(l => l.party === partyName);
+        logs = e.target.result.filter(l => l.party === partyName);
+      };
+
+      tx.objectStore("payments").getAll().onsuccess = function(e) {
+        payments = e.target.result.filter(p => p.party === partyName);
+        
         let tbody = document.querySelector("#party-table tbody");
         tbody.innerHTML = '';
 
@@ -451,15 +584,41 @@
         logs.forEach(l => {
           totalBill += l.total;
           totalPaid += (l.paid || 0);
-          let bal = l.total - (l.paid || 0);
 
           let tr = document.createElement('tr');
-          tr.innerHTML = `<td>${l.date}</td><td>${l.item} (x${l.qty})</td><td>₹${l.total}</td><td>₹${l.paid || 0}</td><td>₹${bal}</td>`;
+          tr.innerHTML = `<td>${l.date}</td><td>Inv: ${l.invNum || '-'}</td><td>₹${l.total}</td><td>₹${l.paid || 0}</td><td>-</td>`;
+          tbody.appendChild(tr);
+        });
+
+        payments.forEach(p => {
+          totalPaid += p.amount;
+          let tr = document.createElement('tr');
+          tr.style.background = "#f0fdf4";
+          tr.innerHTML = `<td>${p.date}</td><td><i>Direct Payment / Adjustment</i></td><td>-</td><td>₹${p.amount}</td><td>-</td>`;
           tbody.appendChild(tr);
         });
 
         let dueBalance = totalBill - totalPaid;
         document.getElementById('party-balance').textContent = '₹' + dueBalance;
+      };
+    }
+
+    function savePartyPayment() {
+      if(!db) return;
+      let partyName = document.getElementById('acc-party').value;
+      let amount = parseFloat(document.getElementById('party-adjust-amount').value);
+
+      if(!partyName || !amount || amount <= 0) return alert("Select a party and enter a valid amount.");
+
+      let tx = db.transaction("payments", "readwrite");
+      tx.objectStore("payments").add({
+        party: partyName,
+        amount: amount,
+        date: new Date().toLocaleDateString()
+      }).onsuccess = function() {
+        alert("Payment Recorded & Balance Adjusted!");
+        document.getElementById('party-adjust-amount').value = '';
+        renderPartyStatement();
       };
     }
 
@@ -474,77 +633,120 @@
         logs.reverse().forEach(log => {
           let tr = document.createElement('tr');
           let badgeClass = log.type === 'SALE' ? 'badge-sale' : 'badge-purchase';
+
           tr.innerHTML = `
             <td><span class="badge ${badgeClass}">${log.type}</span></td>
-            <td>${log.party || '-'}</td>
-            <td><b>${log.item}</b> (x${log.qty})</td>
+            <td><b>${log.invNum || 'N/A'}</b><br><small>${log.party}</small></td>
             <td>₹${log.total}</td>
             <td>₹${log.paid || 0}</td>
             <td>
-              <button class="btn-edit" onclick="editLogEntry(${log.id})">Edit</button>
-              <button class="btn-danger" onclick="deleteLogEntry(${log.id})">Del</button>
+              <button class="btn-view" onclick="viewInvoiceDetails(${log.id})">View</button>
+              <button class="btn-edit" onclick="editInvoiceEntry(${log.id})">Edit</button>
+              <button class="btn-danger" onclick="deleteInvoiceEntry(${log.id})">Del</button>
             </td>
           `;
+
           tbody.appendChild(tr);
         });
       };
     }
 
-    function editLogEntry(id) {
+    /* VIEW FULL INVOICE MODAL */
+    function viewInvoiceDetails(id) {
       if(!db) return;
       let tx = db.transaction("logs", "readonly");
       tx.objectStore("logs").get(id).onsuccess = function(e) {
         let log = e.target.result;
         if(!log) return;
 
-        let newParty = prompt("Edit Party Name:", log.party);
-        let newTotal = prompt("Edit Total Amount (₹):", log.total);
+        document.getElementById('modal-title').textContent = `${log.type} Invoice: ${log.invNum || 'N/A'}`;
+        document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${log.date}`;
+
+        let tbody = document.querySelector("#modal-items-table tbody");
+        tbody.innerHTML = '';
+
+        let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate || log.cost, total: log.total }];
+
+        itemsList.forEach(i => {
+          let tr = document.createElement('tr');
+          let rateVal = i.rate || i.cost || 0;
+          tr.innerHTML = `<td><b>${i.name}</b></td><td>${i.qty}</td><td>₹${rateVal}</td><td>₹${i.total}</td>`;
+          tbody.appendChild(tr);
+        });
+
+        let subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
+        let misc = log.miscCharges || 0;
+        let due = log.total - (log.paid || 0);
+
+        document.getElementById('modal-summary-box').innerHTML = `
+          <div>Items Subtotal: <b>₹${subtotal}</b></div>
+          ${misc ? `<div>Freight / Misc Charges: <b>₹${misc}</b></div>` : ''}
+          <div style="font-size:1rem; color:#111827; margin-top:4px;">Grand Total: <b>₹${log.total}</b></div>
+          <div style="color:#059669;">Amount Paid: ₹${log.paid || 0}</div>
+          <div style="color:#dc2626;">Balance Due: ₹${due}</div>
+        `;
+
+        document.getElementById('invoice-modal').classList.remove('hidden');
+      };
+    }
+
+    function closeInvoiceModal() {
+      document.getElementById('invoice-modal').classList.add('hidden');
+    }
+
+    function editInvoiceEntry(id) {
+      if(!db) return;
+      let tx = db.transaction("logs", "readonly");
+      tx.objectStore("logs").get(id).onsuccess = function(e) {
+        let log = e.target.result;
+        if(!log) return;
+
+        let newTotal = prompt("Edit Invoice Total Amount (₹):", log.total);
         let newPaid = prompt("Edit Paid Amount (₹):", log.paid || 0);
 
-        if(newParty !== null && newTotal !== null && newPaid !== null) {
+        if(log.items && log.items.length > 0) {
+          log.items.forEach(item => {
+            let newQty = prompt(`Edit Quantity for "${item.name}":`, item.qty);
+            let newRate = prompt(`Edit Rate for "${item.name}" (₹):`, item.rate || item.cost);
+            if(newQty !== null) item.qty = parseInt(newQty) || item.qty;
+            if(newRate !== null) {
+              if(log.type === 'SALE') item.rate = parseFloat(newRate) || item.rate;
+              else item.cost = parseFloat(newRate) || item.cost;
+            }
+          });
+        }
+
+        if(newTotal !== null && newPaid !== null) {
           let updateTx = db.transaction("logs", "readwrite");
-          log.party = newParty.trim();
-          log.total = parseFloat(newTotal) || 0;
+          log.total = parseFloat(newTotal) || log.total;
           log.paid = parseFloat(newPaid) || 0;
           updateTx.objectStore("logs").put(log).onsuccess = function() {
-            alert("Updated!");
+            alert("Invoice Updated!");
             renderHistoryTable();
           };
         }
       };
     }
 
-    function deleteLogEntry(id) {
+    function deleteInvoiceEntry(id) {
       if(!db) return;
-      if(!confirm("Delete this record? Stock will be restored.")) return;
+      if(!confirm("Delete this entire invoice? Associated quantities will be reversed.")) return;
 
-      let tx = db.transaction(["logs", "items"], "readwrite");
-      let logStore = tx.objectStore("logs");
-      let itemStore = tx.objectStore("items");
-
-      logStore.get(id).onsuccess = function(e) {
-        let log = e.target.result;
-        if(!log) return;
-
-        itemStore.get(log.item).onsuccess = function(itemEvent) {
-          let item = itemEvent.target.result;
-          if(item) {
-            if(log.type === 'SALE') item.soldQty -= log.qty;
-            if(log.type === 'PURCHASE') item.purchasedQty -= log.qty;
-            itemStore.put(item);
-          }
-          logStore.delete(id);
-          alert("Deleted!");
-          renderHistoryTable();
-        };
+      let tx = db.transaction("logs", "readwrite");
+      tx.objectStore("logs").delete(id).onsuccess = function() {
+        alert("Invoice Deleted!");
+        renderHistoryTable();
       };
     }
 
     function renderStockSummary() {
       if(!db) return;
       let tx = db.transaction(["items", "logs"], "readonly");
+      
       tx.objectStore("items").getAll().onsuccess = function(e) {
-        renderStockSummaryTable('', e.target.result);
+        let items = e.target.result || [];
+        renderCategorySummary(items);
+        renderStockSummaryTable('', items);
       };
 
       tx.objectStore("logs").getAll().onsuccess = function(e) {
@@ -556,12 +758,33 @@
       };
     }
 
+    function renderCategorySummary(items) {
+      let catMap = {};
+      items.forEach(item => {
+        let cat = item.category || 'General';
+        let closing = (item.openingStock || 0) + (item.purchasedQty || 0) - (item.soldQty || 0);
+        catMap[cat] = (catMap[cat] || 0) + closing;
+      });
+
+      let tbody = document.querySelector("#category-summary-table tbody");
+      tbody.innerHTML = '';
+      for (let cat in catMap) {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td><b>${cat}</b></td><td><b>${catMap[cat]}</b></td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
     function renderStockSummaryTable(query, itemsList) {
       if(!itemsList) itemsList = allItems;
       let tbody = document.querySelector("#stock-summary-table tbody");
       tbody.innerHTML = '';
 
-      let filtered = itemsList.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
+      let filtered = itemsList.filter(i => 
+        i.name.toLowerCase().includes(query.toLowerCase()) || 
+        (i.category && i.category.toLowerCase().includes(query.toLowerCase()))
+      );
+
       filtered.forEach(item => {
         let opening = item.openingStock || 0;
         let purchased = item.purchasedQty || 0;
@@ -570,7 +793,7 @@
 
         let tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><b>${item.name}</b></td>
+          <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
           <td>${opening}</td>
           <td style="color:#059669;">+${purchased}</td>
           <td style="color:#dc2626;">-${sold}</td>
@@ -592,14 +815,16 @@
         if(!item) return;
 
         let newOpening = prompt("Edit Opening Stock Qty:", item.openingStock || 0);
+        let newCost = prompt("Edit Purchase Rate (₹):", item.costPrice || 0);
         let newSelling = prompt("Edit Selling Price (₹):", item.sellingPrice || 0);
 
         if(newOpening !== null && newSelling !== null) {
           let updateTx = db.transaction("items", "readwrite");
           item.openingStock = parseInt(newOpening) || 0;
+          item.costPrice = parseFloat(newCost) || 0;
           item.sellingPrice = parseFloat(newSelling) || 0;
           updateTx.objectStore("items").put(item).onsuccess = function() {
-            alert("Item updated!");
+            alert("Item details updated!");
             renderStockSummary();
           };
         }
