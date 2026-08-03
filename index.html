@@ -181,7 +181,7 @@
       </div>
     </div>
 
-    <!-- TRANSACTION HISTORY (WITH EDIT & DELETE) -->
+    <!-- TRANSACTION HISTORY (EDIT & DELETE) -->
     <div id="tab-history" class="tab-content hidden">
       <div class="card">
         <h3>Sales & Purchase Logs</h3>
@@ -234,8 +234,7 @@
     let purchaseCart = [];
     let allItems = [];
 
-    // Initialize Database cleanly
-    const request = indexedDB.open("AimanMobileStoreV4", 1);
+    const request = indexedDB.open("AimanStoreFinalV5", 1);
 
     request.onupgradeneeded = function(e) {
       db = e.target.result;
@@ -248,7 +247,6 @@
       loadItemsData();
     };
 
-    // Fail-safe Tab Switching
     function switchTab(tabName, btnEl) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -292,13 +290,12 @@
       if(item) document.getElementById('s-rate').value = item.sellingPrice || 0;
     }
 
-    // --- SALES ---
     function addItemToSaleCart() {
       let name = document.getElementById('s-item').value;
       let qty = parseInt(document.getElementById('s-qty').value);
       let rate = parseFloat(document.getElementById('s-rate').value);
 
-      if(!name || qty <= 0) return alert("Please select an item and valid quantity.");
+      if(!name || qty <= 0) return alert("Select an item and valid quantity.");
 
       saleCart.push({ name, qty, rate, total: qty * rate });
       renderSaleCart();
@@ -316,6 +313,7 @@
     }
 
     function submitFinalSale() {
+      if(!db) return alert("Database loading... try again in a second.");
       if(saleCart.length === 0) return alert("Cart is empty!");
       let customer = document.getElementById('s-customer').value.trim() || 'Cash Customer';
       let paid = parseFloat(document.getElementById('s-paid').value) || 0;
@@ -353,7 +351,6 @@
       loadItemsData();
     }
 
-    // --- PURCHASES ---
     function addItemToPurchaseCart() {
       let name = document.getElementById('p-name').value.trim();
       let category = document.getElementById('p-category').value.trim();
@@ -381,6 +378,7 @@
     }
 
     function submitFinalPurchase() {
+      if(!db) return alert("Database loading... try again in a second.");
       if(purchaseCart.length === 0) return alert("No purchase items added!");
       let supplier = document.getElementById('p-supplier').value.trim() || 'General Supplier';
       let paid = parseFloat(document.getElementById('p-paid').value) || 0;
@@ -415,8 +413,8 @@
       renderPurchaseCart();
     }
 
-    // --- LEDGER ---
     function renderPartyDropdown() {
+      if(!db) return;
       let partyType = document.getElementById('acc-type').value;
       let targetType = partyType === 'Customer' ? 'SALE' : 'PURCHASE';
 
@@ -437,6 +435,7 @@
     }
 
     function renderPartyStatement() {
+      if(!db) return;
       let partyName = document.getElementById('acc-party').value;
       if(!partyName) return;
 
@@ -464,11 +463,11 @@
       };
     }
 
-    // --- HISTORY (EDIT & DELETE LOGS) ---
     function renderHistoryTable() {
+      if(!db) return;
       let tx = db.transaction("logs", "readonly");
       tx.objectStore("logs").getAll().onsuccess = function(e) {
-        let logs = e.target.result;
+        let logs = e.target.result || [];
         let tbody = document.querySelector("#history-table tbody");
         tbody.innerHTML = '';
 
@@ -492,6 +491,7 @@
     }
 
     function editLogEntry(id) {
+      if(!db) return;
       let tx = db.transaction("logs", "readonly");
       tx.objectStore("logs").get(id).onsuccess = function(e) {
         let log = e.target.result;
@@ -503,4 +503,118 @@
 
         if(newParty !== null && newTotal !== null && newPaid !== null) {
           let updateTx = db.transaction("logs", "readwrite");
-          log.party = newP
+          log.party = newParty.trim();
+          log.total = parseFloat(newTotal) || 0;
+          log.paid = parseFloat(newPaid) || 0;
+          updateTx.objectStore("logs").put(log).onsuccess = function() {
+            alert("Updated!");
+            renderHistoryTable();
+          };
+        }
+      };
+    }
+
+    function deleteLogEntry(id) {
+      if(!db) return;
+      if(!confirm("Delete this record? Stock will be restored.")) return;
+
+      let tx = db.transaction(["logs", "items"], "readwrite");
+      let logStore = tx.objectStore("logs");
+      let itemStore = tx.objectStore("items");
+
+      logStore.get(id).onsuccess = function(e) {
+        let log = e.target.result;
+        if(!log) return;
+
+        itemStore.get(log.item).onsuccess = function(itemEvent) {
+          let item = itemEvent.target.result;
+          if(item) {
+            if(log.type === 'SALE') item.soldQty -= log.qty;
+            if(log.type === 'PURCHASE') item.purchasedQty -= log.qty;
+            itemStore.put(item);
+          }
+          logStore.delete(id);
+          alert("Deleted!");
+          renderHistoryTable();
+        };
+      };
+    }
+
+    function renderStockSummary() {
+      if(!db) return;
+      let tx = db.transaction(["items", "logs"], "readonly");
+      tx.objectStore("items").getAll().onsuccess = function(e) {
+        renderStockSummaryTable('', e.target.result);
+      };
+
+      tx.objectStore("logs").getAll().onsuccess = function(e) {
+        let logs = e.target.result || [];
+        let totalSales = logs.filter(l => l.type === 'SALE').reduce((sum, l) => sum + l.total, 0);
+        let totalPurchases = logs.filter(l => l.type === 'PURCHASE').reduce((sum, l) => sum + l.total, 0);
+        document.getElementById('stat-sales').textContent = '₹' + totalSales;
+        document.getElementById('stat-purchases').textContent = '₹' + totalPurchases;
+      };
+    }
+
+    function renderStockSummaryTable(query, itemsList) {
+      if(!itemsList) itemsList = allItems;
+      let tbody = document.querySelector("#stock-summary-table tbody");
+      tbody.innerHTML = '';
+
+      let filtered = itemsList.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
+      filtered.forEach(item => {
+        let opening = item.openingStock || 0;
+        let purchased = item.purchasedQty || 0;
+        let sold = item.soldQty || 0;
+        let closing = opening + purchased - sold;
+
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${item.name}</b></td>
+          <td>${opening}</td>
+          <td style="color:#059669;">+${purchased}</td>
+          <td style="color:#dc2626;">-${sold}</td>
+          <td><b>${closing}</b></td>
+          <td>
+            <button class="btn-edit" onclick="editItem('${item.name}')">Edit</button>
+            <button class="btn-danger" onclick="deleteItem('${item.name}')">Del</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function editItem(itemName) {
+      if(!db) return;
+      let tx = db.transaction("items", "readonly");
+      tx.objectStore("items").get(itemName).onsuccess = function(e) {
+        let item = e.target.result;
+        if(!item) return;
+
+        let newOpening = prompt("Edit Opening Stock Qty:", item.openingStock || 0);
+        let newSelling = prompt("Edit Selling Price (₹):", item.sellingPrice || 0);
+
+        if(newOpening !== null && newSelling !== null) {
+          let updateTx = db.transaction("items", "readwrite");
+          item.openingStock = parseInt(newOpening) || 0;
+          item.sellingPrice = parseFloat(newSelling) || 0;
+          updateTx.objectStore("items").put(item).onsuccess = function() {
+            alert("Item updated!");
+            renderStockSummary();
+          };
+        }
+      };
+    }
+
+    function deleteItem(itemName) {
+      if(!db) return;
+      if(!confirm(`Delete item "${itemName}"?`)) return;
+      let tx = db.transaction("items", "readwrite");
+      tx.objectStore("items").delete(itemName).onsuccess = function() {
+        alert("Item deleted!");
+        renderStockSummary();
+      };
+    }
+  </script>
+</body>
+</html>
