@@ -24,7 +24,8 @@
     .btn-blue { background: #2563eb; color: white; width: 100%; }
     .btn-green { background: #059669; color: white; width: 100%; }
     .btn-add { background: #4f46e5; color: white; margin-top: 8px; width: 100%; }
-    .btn-danger { background: #dc2626; color: white; padding: 4px 8px; font-size: 0.8rem; }
+    .btn-danger { background: #dc2626; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; }
+    .btn-edit { background: #d97706; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; margin-right: 4px; }
 
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
     .stat-card { background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -38,7 +39,7 @@
     
     .cart-list { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin-top: 10px; }
     .cart-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #d1d5db; padding: 6px 0; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .badge-sale { background: #dcfce7; color: #15803d; }
     .badge-purchase { background: #fee2e2; color: #b91c1c; }
@@ -49,11 +50,11 @@
   <header>📱 Aiman Mobile Store</header>
 
   <div class="nav-tabs">
-    <button class="tab-btn active" onclick="switchTab('sales', event)">Sales</button>
-    <button class="tab-btn" onclick="switchTab('purchase', event)">Purchase</button>
-    <button class="tab-btn" onclick="switchTab('accounts', event)">Ledger</button>
-    <button class="tab-btn" onclick="switchTab('history', event)">History</button>
-    <button class="tab-btn" onclick="switchTab('stock', event)">Stock Summary</button>
+    <button class="tab-btn active" onclick="switchTab('sales', this)">Sales</button>
+    <button class="tab-btn" onclick="switchTab('purchase', this)">Purchase</button>
+    <button class="tab-btn" onclick="switchTab('accounts', this)">Ledger</button>
+    <button class="tab-btn" onclick="switchTab('history', this)">History</button>
+    <button class="tab-btn" onclick="switchTab('stock', this)">Stock Summary</button>
   </div>
 
   <div class="container">
@@ -153,7 +154,7 @@
       </div>
     </div>
 
-    <!-- CUSTOMER & VENDOR ACCOUNTS / LEDGER -->
+    <!-- LEDGER -->
     <div id="tab-accounts" class="tab-content hidden">
       <div class="card">
         <h3>Accounts & Outstanding Balances</h3>
@@ -173,20 +174,20 @@
 
         <table id="party-table" style="margin-top:15px;">
           <thead>
-            <tr><th>Date</th><th>Item/Ref</th><th>Total</th><th>Paid</th><th>Balance</th></tr>
+            <tr><th>Date</th><th>Item</th><th>Total</th><th>Paid</th><th>Due</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
 
-    <!-- TRANSACTION HISTORY -->
+    <!-- TRANSACTION HISTORY (WITH EDIT & DELETE) -->
     <div id="tab-history" class="tab-content hidden">
       <div class="card">
         <h3>Sales & Purchase Logs</h3>
         <table id="history-table">
           <thead>
-            <tr><th>Type</th><th>Party</th><th>Item</th><th>Qty</th><th>Total</th><th>Action</th></tr>
+            <tr><th>Type</th><th>Party</th><th>Item</th><th>Total</th><th>Paid</th><th>Actions</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -207,7 +208,7 @@
       </div>
 
       <div class="card">
-        <h3>Full Stock Movement Summary</h3>
+        <h3>Stock Movement Summary</h3>
         <input type="text" placeholder="Search item..." oninput="renderStockSummaryTable(this.value)">
         <table id="stock-summary-table">
           <thead>
@@ -217,6 +218,7 @@
               <th>Purchased</th>
               <th>Sold</th>
               <th>Closing</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -232,8 +234,8 @@
     let purchaseCart = [];
     let allItems = [];
 
-    // Reset/Open Database cleanly
-    const request = indexedDB.open("AimanStoreFinalDB", 1);
+    // Initialize Database cleanly
+    const request = indexedDB.open("AimanMobileStoreV4", 1);
 
     request.onupgradeneeded = function(e) {
       db = e.target.result;
@@ -246,12 +248,14 @@
       loadItemsData();
     };
 
-    function switchTab(tabName, evt) {
+    // Fail-safe Tab Switching
+    function switchTab(tabName, btnEl) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       
-      document.getElementById('tab-' + tabName).classList.remove('hidden');
-      if(evt && evt.target) evt.target.classList.add('active');
+      let targetTab = document.getElementById('tab-' + tabName);
+      if(targetTab) targetTab.classList.remove('hidden');
+      if(btnEl) btnEl.classList.add('active');
 
       if(tabName === 'stock') renderStockSummary();
       if(tabName === 'sales') loadItemsData();
@@ -270,12 +274,14 @@
 
     function filterItems(selectId, query) {
       let select = document.getElementById(selectId);
+      if(!select) return;
       select.innerHTML = '<option value="">-- Select Item --</option>';
       let filtered = allItems.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
       filtered.forEach(item => {
         let opt = document.createElement('option');
         opt.value = item.name;
-        opt.textContent = `${item.name} (Closing Stock: ${(item.openingStock||0) + (item.purchasedQty||0) - (item.soldQty||0)})`;
+        let closing = (item.openingStock||0) + (item.purchasedQty||0) - (item.soldQty||0);
+        opt.textContent = `${item.name} (Stock: ${closing})`;
         select.appendChild(opt);
       });
     }
@@ -286,12 +292,13 @@
       if(item) document.getElementById('s-rate').value = item.sellingPrice || 0;
     }
 
+    // --- SALES ---
     function addItemToSaleCart() {
       let name = document.getElementById('s-item').value;
       let qty = parseInt(document.getElementById('s-qty').value);
       let rate = parseFloat(document.getElementById('s-rate').value);
 
-      if(!name || qty <= 0) return alert("Select item and valid quantity.");
+      if(!name || qty <= 0) return alert("Please select an item and valid quantity.");
 
       saleCart.push({ name, qty, rate, total: qty * rate });
       renderSaleCart();
@@ -303,7 +310,7 @@
       let grandTotal = 0;
       saleCart.forEach((item, idx) => {
         grandTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} = ₹${item.total}</div><button class="btn btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
+        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} = ₹${item.total}</div><button class="btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
       });
       document.getElementById('s-grand-total').textContent = grandTotal;
     }
@@ -346,6 +353,7 @@
       loadItemsData();
     }
 
+    // --- PURCHASES ---
     function addItemToPurchaseCart() {
       let name = document.getElementById('p-name').value.trim();
       let category = document.getElementById('p-category').value.trim();
@@ -367,7 +375,7 @@
       let grandTotal = 0;
       purchaseCart.forEach((item, idx) => {
         grandTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} = ₹${item.total}</div><button class="btn btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
+        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} = ₹${item.total}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
       });
       document.getElementById('p-grand-total').textContent = grandTotal;
     }
@@ -407,6 +415,7 @@
       renderPurchaseCart();
     }
 
+    // --- LEDGER ---
     function renderPartyDropdown() {
       let partyType = document.getElementById('acc-type').value;
       let targetType = partyType === 'Customer' ? 'SALE' : 'PURCHASE';
@@ -455,6 +464,7 @@
       };
     }
 
+    // --- HISTORY (EDIT & DELETE LOGS) ---
     function renderHistoryTable() {
       let tx = db.transaction("logs", "readonly");
       tx.objectStore("logs").getAll().onsuccess = function(e) {
@@ -468,46 +478,29 @@
           tr.innerHTML = `
             <td><span class="badge ${badgeClass}">${log.type}</span></td>
             <td>${log.party || '-'}</td>
-            <td><b>${log.item}</b></td>
-            <td>${log.qty}</td>
+            <td><b>${log.item}</b> (x${log.qty})</td>
             <td>₹${log.total}</td>
-            <td><button class="btn-danger" onclick="deleteLogEntry(${log.id})">Del</button></td>
+            <td>₹${log.paid || 0}</td>
+            <td>
+              <button class="btn-edit" onclick="editLogEntry(${log.id})">Edit</button>
+              <button class="btn-danger" onclick="deleteLogEntry(${log.id})">Del</button>
+            </td>
           `;
           tbody.appendChild(tr);
         });
       };
     }
 
-    function deleteLogEntry(id) {
-      if(!confirm("Delete entry? Stock will adjust automatically.")) return;
-      let tx = db.transaction(["logs", "items"], "readwrite");
-      let logStore = tx.objectStore("logs");
-      let itemStore = tx.objectStore("items");
-
-      logStore.get(id).onsuccess = function(e) {
+    function editLogEntry(id) {
+      let tx = db.transaction("logs", "readonly");
+      tx.objectStore("logs").get(id).onsuccess = function(e) {
         let log = e.target.result;
         if(!log) return;
 
-        itemStore.get(log.item).onsuccess = function(itemEvent) {
-          let item = itemEvent.target.result;
-          if(item) {
-            if(log.type === 'SALE') item.soldQty -= log.qty;
-            if(log.type === 'PURCHASE') item.purchasedQty -= log.qty;
-            itemStore.put(item);
-          }
-          logStore.delete(id);
-          alert("Entry deleted!");
-          renderHistoryTable();
-        };
-      };
-    }
+        let newParty = prompt("Edit Party Name:", log.party);
+        let newTotal = prompt("Edit Total Amount (₹):", log.total);
+        let newPaid = prompt("Edit Paid Amount (₹):", log.paid || 0);
 
-    function renderStockSummary() {
-      let tx = db.transaction(["items", "logs"], "readonly");
-      tx.objectStore("items").getAll().onsuccess = function(e) {
-        renderStockSummaryTable('', e.target.result);
-      };
-
-      tx.objectStore("logs").getAll().onsuccess = function(e) {
-        let logs = e.target.result;
-        let totalSales =
+        if(newParty !== null && newTotal !== null && newPaid !== null) {
+          let updateTx = db.transaction("logs", "readwrite");
+          log.party = newP
