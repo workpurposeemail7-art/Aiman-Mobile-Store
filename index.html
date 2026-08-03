@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aiman Mobile Store Manager</title>
+  <title>Aiman Mobile Store</title>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
     body { background-color: #f3f4f6; color: #1f2937; padding-bottom: 70px; }
@@ -25,7 +25,6 @@
     .btn-green { background: #059669; color: white; width: 100%; }
     .btn-add { background: #4f46e5; color: white; margin-top: 8px; width: 100%; }
     .btn-danger { background: #dc2626; color: white; padding: 4px 8px; font-size: 0.8rem; }
-    .btn-edit { background: #d97706; color: white; padding: 4px 8px; font-size: 0.8rem; margin-right: 4px; }
 
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
     .stat-card { background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -50,11 +49,11 @@
   <header>📱 Aiman Mobile Store</header>
 
   <div class="nav-tabs">
-    <button class="tab-btn active" onclick="switchTab('sales')">Sales</button>
-    <button class="tab-btn" onclick="switchTab('purchase')">Purchase</button>
-    <button class="tab-btn" onclick="switchTab('accounts')">Accounts / Ledger</button>
-    <button class="tab-btn" onclick="switchTab('history')">History</button>
-    <button class="tab-btn" onclick="switchTab('stock')">Stock Summary</button>
+    <button class="tab-btn active" onclick="switchTab('sales', event)">Sales</button>
+    <button class="tab-btn" onclick="switchTab('purchase', event)">Purchase</button>
+    <button class="tab-btn" onclick="switchTab('accounts', event)">Ledger</button>
+    <button class="tab-btn" onclick="switchTab('history', event)">History</button>
+    <button class="tab-btn" onclick="switchTab('stock', event)">Stock Summary</button>
   </div>
 
   <div class="container">
@@ -66,12 +65,8 @@
         <label>Customer Name</label>
         <input type="text" id="s-customer" placeholder="e.g. John Doe">
 
-        <div style="display: flex; gap: 8px;">
-          <div style="flex: 1;">
-            <label>Paid Amount (₹)</label>
-            <input type="number" id="s-paid" value="0">
-          </div>
-        </div>
+        <label>Paid Amount (₹)</label>
+        <input type="number" id="s-paid" value="0">
 
         <hr style="margin-top:12px;">
         
@@ -111,12 +106,8 @@
         <label>Supplier / Vendor Name</label>
         <input type="text" id="p-supplier" placeholder="e.g. ABC Wholesalers">
 
-        <div style="display: flex; gap: 8px;">
-          <div style="flex: 1;">
-            <label>Paid Amount (₹)</label>
-            <input type="number" id="p-paid" value="0">
-          </div>
-        </div>
+        <label>Paid Amount (₹)</label>
+        <input type="number" id="p-paid" value="0">
 
         <hr style="margin-top:12px;">
 
@@ -129,7 +120,7 @@
         <div style="display: flex; gap: 8px;">
           <div style="flex: 1;">
             <label>Opening Stock</label>
-            <input type="number" id="p-opening" value="0" placeholder="Initial Stock">
+            <input type="number" id="p-opening" value="0">
           </div>
           <div style="flex: 1;">
             <label>Qty Purchased</label>
@@ -148,7 +139,7 @@
           </div>
         </div>
 
-        <button class="btn btn-add" onclick="addItemToPurchaseCart()">+ Add Item to Purchase List</button>
+        <button class="btn btn-add" onclick="addItemToPurchaseCart()">+ Add Item to List</button>
 
         <div class="cart-list">
           <b>Purchase Items:</b>
@@ -202,7 +193,7 @@
       </div>
     </div>
 
-    <!-- STOCK SUMMARY (OPENING, PURCHASED, SOLD, CLOSING) -->
+    <!-- STOCK SUMMARY -->
     <div id="tab-stock" class="tab-content hidden">
       <div class="stat-grid">
         <div class="stat-card">
@@ -241,7 +232,8 @@
     let purchaseCart = [];
     let allItems = [];
 
-    const request = indexedDB.open("AimanMobileStoreDB", 3);
+    // Reset/Open Database cleanly
+    const request = indexedDB.open("AimanStoreFinalDB", 1);
 
     request.onupgradeneeded = function(e) {
       db = e.target.result;
@@ -254,11 +246,12 @@
       loadItemsData();
     };
 
-    function switchTab(tabName) {
+    function switchTab(tabName, evt) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      
       document.getElementById('tab-' + tabName).classList.remove('hidden');
-      event.target.classList.add('active');
+      if(evt && evt.target) evt.target.classList.add('active');
 
       if(tabName === 'stock') renderStockSummary();
       if(tabName === 'sales') loadItemsData();
@@ -267,9 +260,10 @@
     }
 
     function loadItemsData() {
+      if(!db) return;
       let tx = db.transaction("items", "readonly");
       tx.objectStore("items").getAll().onsuccess = function(e) {
-        allItems = e.target.result;
+        allItems = e.target.result || [];
         filterItems('s-item', '');
       };
     }
@@ -281,7 +275,7 @@
       filtered.forEach(item => {
         let opt = document.createElement('option');
         opt.value = item.name;
-        opt.textContent = `${item.name} (Closing Stock: ${item.openingStock + item.purchasedQty - item.soldQty})`;
+        opt.textContent = `${item.name} (Closing Stock: ${(item.openingStock||0) + (item.purchasedQty||0) - (item.soldQty||0)})`;
         select.appendChild(opt);
       });
     }
@@ -292,7 +286,6 @@
       if(item) document.getElementById('s-rate').value = item.sellingPrice || 0;
     }
 
-    // --- SALES CART ---
     function addItemToSaleCart() {
       let name = document.getElementById('s-item').value;
       let qty = parseInt(document.getElementById('s-qty').value);
@@ -345,7 +338,7 @@
         });
       });
 
-      alert("Sale Recorded Successfully!");
+      alert("Sale Recorded!");
       saleCart = [];
       document.getElementById('s-customer').value = '';
       document.getElementById('s-paid').value = 0;
@@ -353,7 +346,6 @@
       loadItemsData();
     }
 
-    // --- PURCHASE CART ---
     function addItemToPurchaseCart() {
       let name = document.getElementById('p-name').value.trim();
       let category = document.getElementById('p-category').value.trim();
@@ -410,12 +402,11 @@
         });
       });
 
-      alert("Purchases Saved Successfully!");
+      alert("Purchases Saved!");
       purchaseCart = [];
       renderPurchaseCart();
     }
 
-    // --- ACCOUNTS & LEDGER ---
     function renderPartyDropdown() {
       let partyType = document.getElementById('acc-type').value;
       let targetType = partyType === 'Customer' ? 'SALE' : 'PURCHASE';
@@ -464,7 +455,6 @@
       };
     }
 
-    // --- HISTORY & DELETIONS ---
     function renderHistoryTable() {
       let tx = db.transaction("logs", "readonly");
       tx.objectStore("logs").getAll().onsuccess = function(e) {
@@ -506,3 +496,18 @@
             itemStore.put(item);
           }
           logStore.delete(id);
+          alert("Entry deleted!");
+          renderHistoryTable();
+        };
+      };
+    }
+
+    function renderStockSummary() {
+      let tx = db.transaction(["items", "logs"], "readonly");
+      tx.objectStore("items").getAll().onsuccess = function(e) {
+        renderStockSummaryTable('', e.target.result);
+      };
+
+      tx.objectStore("logs").getAll().onsuccess = function(e) {
+        let logs = e.target.result;
+        let totalSales =
