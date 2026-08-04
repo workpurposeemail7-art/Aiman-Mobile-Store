@@ -3,23 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aiman Mobile Store</title>
+  <title>Aiman Mobile Store (Cloud Sync)</title>
+
+  <!-- Firebase Cloud SDKs (Realtime Database) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
     body { background-color: #f3f4f6; color: #1f2937; padding-bottom: 70px; }
     header { background: #2563eb; color: white; padding: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; position: sticky; top: 0; z-index: 10; }
-    
+
+    .sync-status { background: #dcfce7; color: #15803d; text-align: center; padding: 4px; font-size: 0.75rem; font-weight: bold; }
+
     .nav-tabs { display: flex; background: white; border-bottom: 1px solid #e5e7eb; position: sticky; top: 51px; z-index: 9; overflow-x: auto; }
     .tab-btn { flex: 1; min-width: 80px; padding: 12px 5px; text-align: center; border: none; background: none; font-weight: 600; font-size: 0.8rem; color: #6b7280; cursor: pointer; white-space: nowrap; }
     .tab-btn.active { color: #2563eb; border-bottom: 3px solid #2563eb; }
 
     .container { padding: 15px; max-width: 700px; margin: 0 auto; }
     .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; }
-    
+
     label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; margin-bottom: 4px; color: #374151; }
     input, select { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; outline: none; }
     input:focus, select:focus { border-color: #2563eb; }
-    
+
     .btn { padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
     .btn-blue { background: #2563eb; color: white; width: 100%; }
     .btn-green { background: #059669; color: white; width: 100%; }
@@ -37,7 +44,7 @@
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8rem; }
     th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #e5e7eb; }
     th { background: #f9fafb; color: #4b5563; }
-    
+
     .cart-list { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin-top: 10px; }
     .cart-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #d1d5db; padding: 6px 0; }
     .hidden { display: none !important; }
@@ -45,7 +52,7 @@
     .badge-sale { background: #dcfce7; color: #15803d; }
     .badge-purchase { background: #fee2e2; color: #b91c1c; }
 
-    /* Modal Overlay for Invoice View */
+    /* Modal Overlay */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
     .modal-card { background: white; width: 90%; max-width: 500px; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 85vh; overflow-y: auto; }
   </style>
@@ -53,11 +60,12 @@
 <body>
 
   <header>📱 Aiman Mobile Store</header>
+  <div class="sync-status">☁️ Realtime Cloud Sync Active</div>
 
   <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('sales', this)">Sales</button>
     <button class="tab-btn" onclick="switchTab('purchase', this)">Purchase</button>
-    <button class="tab-btn" onclick="switchTab('lookup', this)">Item Lookup</button>
+    <button class="tab-btn" onclick="switchTab('lookup', this)">Directory</button>
     <button class="tab-btn" onclick="switchTab('accounts', this)">Ledger</button>
     <button class="tab-btn" onclick="switchTab('history', this)">Invoices</button>
     <button class="tab-btn" onclick="switchTab('stock', this)">Stock Summary</button>
@@ -76,7 +84,7 @@
         <input type="number" id="s-paid" value="0">
 
         <hr style="margin-top:12px;">
-        
+
         <label>Search & Select Item</label>
         <input type="text" placeholder="Type item name..." oninput="filterItems('s-item', this.value)">
         <select id="s-item" onchange="updateSaleRate()"></select>
@@ -116,7 +124,7 @@
             <input type="text" id="p-inv-num" placeholder="e.g. INV-1001">
           </div>
           <div style="flex: 1;">
-            <label>Supplier / Vendor Name</label>
+            <label>Supplier / Vendor</label>
             <input type="text" id="p-supplier" placeholder="e.g. ABC Wholesalers">
           </div>
         </div>
@@ -128,7 +136,7 @@
           </div>
           <div style="flex: 1;">
             <label>Freight / Misc Charges (₹)</label>
-            <input type="number" id="p-misc" value="0" placeholder="Auto allocated">
+            <input type="number" id="p-misc" value="0" oninput="renderPurchaseCart()">
           </div>
         </div>
 
@@ -225,7 +233,7 @@
 
         <table id="party-table" style="margin-top:15px;">
           <thead>
-            <tr><th>Date</th><th>Description / Inv</th><th>Total</th><th>Paid / Adj</th><th>Balance</th></tr>
+            <tr><th>Date</th><th>Description / Inv</th><th>Total</th><th>Paid / Adj</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -294,7 +302,7 @@
     <div class="modal-card">
       <h3 id="modal-title" style="margin-bottom: 5px;">Invoice Details</h3>
       <p id="modal-subtitle" style="font-size: 0.8rem; color: #6b7280; margin-bottom: 15px;"></p>
-      
+
       <table id="modal-items-table">
         <thead>
           <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
@@ -309,47 +317,60 @@
   </div>
 
   <script>
-    let db;
+    const firebaseConfig = {
+      apiKey: "AIzaSyAzYknsoulMqjCv4bRGUQ7Nop5FFfHsaLk",
+      authDomain: "aiman-mobile-store-5faf8.firebaseapp.com",
+      databaseURL: "https://aiman-mobile-store-5faf8-default-rtdb.firebaseio.com",
+      projectId: "aiman-mobile-store-5faf8",
+      storageBucket: "aiman-mobile-store-5faf8.firebasestorage.app",
+      messagingSenderId: "572688253893",
+      appId: "1:572688253893:web:81613e09e8c5e4e7e701ac"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const rtdb = firebase.database();
+
     let saleCart = [];
     let purchaseCart = [];
     let allItems = [];
+    let allLogs = [];
+    let allPayments = [];
 
-    const request = indexedDB.open("AimanStoreFinalV6", 1);
+    // Realtime Listeners
+    rtdb.ref("items").on("value", snapshot => {
+      let data = snapshot.val() || {};
+      allItems = Object.keys(data).map(key => ({ key, ...data[key] }));
+      filterItems('s-item', '');
+      renderItemDirectory('');
+      renderStockSummary();
+    });
 
-    request.onupgradeneeded = function(e) {
-      db = e.target.result;
-      if (!db.objectStoreNames.contains("items")) db.createObjectStore("items", { keyPath: "name" });
-      if (!db.objectStoreNames.contains("logs")) db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
-      if (!db.objectStoreNames.contains("payments")) db.createObjectStore("payments", { keyPath: "id", autoIncrement: true });
-    };
+    rtdb.ref("logs").on("value", snapshot => {
+      let data = snapshot.val() || {};
+      allLogs = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+      renderHistoryTable();
+      renderPartyDropdown();
+      renderStockSummary();
+    });
 
-    request.onsuccess = function(e) {
-      db = e.target.result;
-      loadItemsData();
-    };
+    rtdb.ref("payments").on("value", snapshot => {
+      let data = snapshot.val() || {};
+      allPayments = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+      renderPartyStatement();
+    });
 
     function switchTab(tabName, btnEl) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-      
-      let targetTab = document.getElementById('tab-' + tabName);
-      if(targetTab) targetTab.classList.remove('hidden');
+
+      let target = document.getElementById('tab-' + tabName);
+      if(target) target.classList.remove('hidden');
       if(btnEl) btnEl.classList.add('active');
 
       if(tabName === 'stock') renderStockSummary();
-      if(tabName === 'sales') loadItemsData();
       if(tabName === 'history') renderHistoryTable();
       if(tabName === 'accounts') renderPartyDropdown();
       if(tabName === 'lookup') renderItemDirectory('');
-    }
-
-    function loadItemsData() {
-      if(!db) return;
-      let tx = db.transaction("items", "readonly");
-      tx.objectStore("items").getAll().onsuccess = function(e) {
-        allItems = e.target.result || [];
-        filterItems('s-item', '');
-      };
     }
 
     function filterItems(selectId, query) {
@@ -394,30 +415,22 @@
       document.getElementById('s-grand-total').textContent = grandTotal;
     }
 
-    function submitFinalSale() {
-      if(!db) return alert("Database loading... try again in a second.");
+    async function submitFinalSale() {
       if(saleCart.length === 0) return alert("Cart is empty!");
       let customer = document.getElementById('s-customer').value.trim() || 'Cash Customer';
       let paid = parseFloat(document.getElementById('s-paid').value) || 0;
       let invNum = "SALE-" + Date.now().toString().slice(-6);
-
-      let tx = db.transaction(["items", "logs"], "readwrite");
-      let itemStore = tx.objectStore("items");
-      let logStore = tx.objectStore("logs");
-
       let totalBill = saleCart.reduce((a, b) => a + b.total, 0);
 
-      saleCart.forEach(cartItem => {
-        itemStore.get(cartItem.name).onsuccess = function(e) {
-          let item = e.target.result;
-          if(item) {
-            item.soldQty = (item.soldQty || 0) + cartItem.qty;
-            itemStore.put(item);
-          }
-        };
-      });
+      for(let cartItem of saleCart) {
+        let existing = allItems.find(i => i.name === cartItem.name);
+        if(existing) {
+          let updatedSold = (existing.soldQty || 0) + cartItem.qty;
+          await rtdb.ref("items/" + existing.key).update({ soldQty: updatedSold });
+        }
+      }
 
-      logStore.add({
+      await rtdb.ref("logs").push({
         invNum: invNum,
         type: 'SALE',
         party: customer,
@@ -427,12 +440,11 @@
         date: new Date().toLocaleDateString()
       });
 
-      alert("Sale Recorded!");
+      alert("Sale Recorded Globally!");
       saleCart = [];
       document.getElementById('s-customer').value = '';
       document.getElementById('s-paid').value = 0;
       renderSaleCart();
-      loadItemsData();
     }
 
     function addItemToPurchaseCart() {
@@ -458,14 +470,13 @@
         itemsTotal += item.total;
         container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> (${item.category}) x ${item.qty} @ ₹${item.cost} = ₹${item.total}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
       });
-      
+
       let misc = parseFloat(document.getElementById('p-misc').value) || 0;
       document.getElementById('p-sub-total').textContent = itemsTotal;
       document.getElementById('p-grand-total').textContent = itemsTotal + misc;
     }
 
-    function submitFinalPurchase() {
-      if(!db) return alert("Database loading... try again in a second.");
+    async function submitFinalPurchase() {
       if(purchaseCart.length === 0) return alert("No purchase items added!");
       let invNum = document.getElementById('p-inv-num').value.trim() || "PUR-" + Date.now().toString().slice(-6);
       let supplier = document.getElementById('p-supplier').value.trim() || 'General Supplier';
@@ -475,26 +486,34 @@
       let subTotal = purchaseCart.reduce((sum, item) => sum + item.total, 0);
       let grandTotal = subTotal + miscCharges;
 
-      let tx = db.transaction(["items", "logs"], "readwrite");
-      let itemStore = tx.objectStore("items");
-      let logStore = tx.objectStore("logs");
-
-      purchaseCart.forEach(cartItem => {
+      for(let cartItem of purchaseCart) {
         let itemRatio = subTotal > 0 ? (cartItem.total / subTotal) : (1 / purchaseCart.length);
         let allocatedMisc = miscCharges * itemRatio;
         let effectiveCostPerUnit = (cartItem.total + allocatedMisc) / cartItem.qty;
 
-        itemStore.get(cartItem.name).onsuccess = function(e) {
-          let item = e.target.result || { name: cartItem.name, openingStock: cartItem.opening, purchasedQty: 0, soldQty: 0, category: cartItem.category };
-          item.purchasedQty = (item.purchasedQty || 0) + cartItem.qty;
-          item.costPrice = parseFloat(effectiveCostPerUnit.toFixed(2));
-          item.sellingPrice = cartItem.sell;
-          item.category = cartItem.category;
-          itemStore.put(item);
-        };
-      });
+        let existing = allItems.find(i => i.name === cartItem.name);
+        if(existing) {
+          let updatedPurchased = (existing.purchasedQty || 0) + cartItem.qty;
+          await rtdb.ref("items/" + existing.key).update({
+            purchasedQty: updatedPurchased,
+            costPrice: parseFloat(effectiveCostPerUnit.toFixed(2)),
+            sellingPrice: cartItem.sell,
+            category: cartItem.category
+          });
+        } else {
+          await rtdb.ref("items").push({
+            name: cartItem.name,
+            openingStock: cartItem.opening,
+            purchasedQty: cartItem.qty,
+            soldQty: 0,
+            costPrice: parseFloat(effectiveCostPerUnit.toFixed(2)),
+            sellingPrice: cartItem.sell,
+            category: cartItem.category
+          });
+        }
+      }
 
-      logStore.add({
+      await rtdb.ref("logs").push({
         invNum: invNum,
         type: 'PURCHASE',
         party: supplier,
@@ -505,23 +524,22 @@
         date: new Date().toLocaleDateString()
       });
 
-      alert("Purchase Invoice Saved with Pro-Rata Freight Allocation!");
+      alert("Purchase Invoice Saved Globally!");
       purchaseCart = [];
       document.getElementById('p-inv-num').value = '';
       document.getElementById('p-supplier').value = '';
       document.getElementById('p-paid').value = 0;
       document.getElementById('p-misc').value = 0;
       renderPurchaseCart();
-      loadItemsData();
     }
 
     function renderItemDirectory(query) {
-      if(!db) return;
       let tbody = document.getElementById('directory-table-body');
+      if(!tbody) return;
       tbody.innerHTML = '';
 
-      let filtered = allItems.filter(i => 
-        i.name.toLowerCase().includes(query.toLowerCase()) || 
+      let filtered = allItems.filter(i =>
+        i.name.toLowerCase().includes(query.toLowerCase()) ||
         (i.category && i.category.toLowerCase().includes(query.toLowerCase()))
       );
 
@@ -539,223 +557,176 @@
     }
 
     function renderPartyDropdown() {
-      if(!db) return;
       let partyType = document.getElementById('acc-type').value;
       let targetType = partyType === 'Customer' ? 'SALE' : 'PURCHASE';
 
-      let tx = db.transaction("logs", "readonly");
-      tx.objectStore("logs").getAll().onsuccess = function(e) {
-        let logs = e.target.result.filter(l => l.type === targetType);
-        let parties = [...new Set(logs.map(l => l.party))];
-        
-        let select = document.getElementById('acc-party');
-        select.innerHTML = '<option value="">-- Select Name --</option>';
-        parties.forEach(p => {
-          let opt = document.createElement('option');
-          opt.value = p;
-          opt.textContent = p;
-          select.appendChild(opt);
-        });
-      };
+      let logs = allLogs.filter(l => l.type === targetType);
+      let parties = [...new Set(logs.map(l => l.party))];
+
+      let select = document.getElementById('acc-party');
+      if(!select) return;
+      select.innerHTML = '<option value="">-- Select Name --</option>';
+      parties.forEach(p => {
+        let opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        select.appendChild(opt);
+      });
+
+      renderPartyStatement();
     }
 
     function renderPartyStatement() {
-      if(!db) return;
       let partyName = document.getElementById('acc-party').value;
-      if(!partyName) return;
+      let tbody = document.querySelector("#party-table tbody");
+      if(!tbody) return;
+      tbody.innerHTML = '';
 
-      let tx = db.transaction(["logs", "payments"], "readonly");
-      let logs = [];
-      let payments = [];
+      if(!partyName) {
+        document.getElementById('party-balance').textContent = '₹0';
+        return;
+      }
 
-      tx.objectStore("logs").getAll().onsuccess = function(e) {
-        logs = e.target.result.filter(l => l.party === partyName);
-      };
+      let logs = allLogs.filter(l => l.party === partyName);
+      let payments = allPayments.filter(p => p.party === partyName);
 
-      tx.objectStore("payments").getAll().onsuccess = function(e) {
-        payments = e.target.result.filter(p => p.party === partyName);
-        
-        let tbody = document.querySelector("#party-table tbody");
-        tbody.innerHTML = '';
+      let totalBill = 0;
+      let totalPaid = 0;
 
-        let totalBill = 0;
-        let totalPaid = 0;
+      logs.forEach(l => {
+        totalBill += l.total;
+        totalPaid += (l.paid || 0);
 
-        logs.forEach(l => {
-          totalBill += l.total;
-          totalPaid += (l.paid || 0);
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td>${l.date}</td><td>Inv: ${l.invNum || '-'}</td><td>₹${l.total}</td><td>₹${l.paid || 0}</td>`;
+        tbody.appendChild(tr);
+      });
 
-          let tr = document.createElement('tr');
-          tr.innerHTML = `<td>${l.date}</td><td>Inv: ${l.invNum || '-'}</td><td>₹${l.total}</td><td>₹${l.paid || 0}</td><td>-</td>`;
-          tbody.appendChild(tr);
-        });
+      payments.forEach(p => {
+        totalPaid += p.amount;
+        let tr = document.createElement('tr');
+        tr.style.background = "#f0fdf4";
+        tr.innerHTML = `<td>${p.date}</td><td><i>Direct Payment / Adjustment</i></td><td>-</td><td>₹${p.amount}</td>`;
+        tbody.appendChild(tr);
+      });
 
-        payments.forEach(p => {
-          totalPaid += p.amount;
-          let tr = document.createElement('tr');
-          tr.style.background = "#f0fdf4";
-          tr.innerHTML = `<td>${p.date}</td><td><i>Direct Payment / Adjustment</i></td><td>-</td><td>₹${p.amount}</td><td>-</td>`;
-          tbody.appendChild(tr);
-        });
-
-        let dueBalance = totalBill - totalPaid;
-        document.getElementById('party-balance').textContent = '₹' + dueBalance;
-      };
+      let dueBalance = totalBill - totalPaid;
+      document.getElementById('party-balance').textContent = '₹' + dueBalance;
     }
 
-    function savePartyPayment() {
-      if(!db) return;
+    async function savePartyPayment() {
       let partyName = document.getElementById('acc-party').value;
       let amount = parseFloat(document.getElementById('party-adjust-amount').value);
 
       if(!partyName || !amount || amount <= 0) return alert("Select a party and enter a valid amount.");
 
-      let tx = db.transaction("payments", "readwrite");
-      tx.objectStore("payments").add({
+      await rtdb.ref("payments").push({
         party: partyName,
         amount: amount,
         date: new Date().toLocaleDateString()
-      }).onsuccess = function() {
-        alert("Payment Recorded & Balance Adjusted!");
-        document.getElementById('party-adjust-amount').value = '';
-        renderPartyStatement();
-      };
+      });
+
+      alert("Payment Recorded & Balance Adjusted!");
+      document.getElementById('party-adjust-amount').value = '';
     }
 
     function renderHistoryTable() {
-      if(!db) return;
-      let tx = db.transaction("logs", "readonly");
-      tx.objectStore("logs").getAll().onsuccess = function(e) {
-        let logs = e.target.result || [];
-        let tbody = document.querySelector("#history-table tbody");
-        tbody.innerHTML = '';
+      let tbody = document.querySelector("#history-table tbody");
+      if(!tbody) return;
+      tbody.innerHTML = '';
 
-        logs.reverse().forEach(log => {
-          let tr = document.createElement('tr');
-          let badgeClass = log.type === 'SALE' ? 'badge-sale' : 'badge-purchase';
+      [...allLogs].reverse().forEach(log => {
+        let tr = document.createElement('tr');
+        let badgeClass = log.type === 'SALE' ? 'badge-sale' : 'badge-purchase';
 
-          tr.innerHTML = `
-            <td><span class="badge ${badgeClass}">${log.type}</span></td>
-            <td><b>${log.invNum || 'N/A'}</b><br><small>${log.party}</small></td>
-            <td>₹${log.total}</td>
-            <td>₹${log.paid || 0}</td>
-            <td>
-              <button class="btn-view" onclick="viewInvoiceDetails(${log.id})">View</button>
-              <button class="btn-edit" onclick="editInvoiceEntry(${log.id})">Edit</button>
-              <button class="btn-danger" onclick="deleteInvoiceEntry(${log.id})">Del</button>
-            </td>
-          `;
+        tr.innerHTML = `
+          <td><span class="badge ${badgeClass}">${log.type}</span></td>
+          <td><b>${log.invNum || 'N/A'}</b><br><small>${log.party}</small></td>
+          <td>₹${log.total}</td>
+          <td>₹${log.paid || 0}</td>
+          <td>
+            <button class="btn-view" onclick="viewInvoiceDetails('${log.id}')">View</button>
+            <button class="btn-edit" onclick="editInvoiceEntry('${log.id}')">Edit</button>
+            <button class="btn-danger" onclick="deleteInvoiceEntry('${log.id}')">Del</button>
+          </td>
+        `;
 
-          tbody.appendChild(tr);
-        });
-      };
+        tbody.appendChild(tr);
+      });
     }
 
     /* VIEW FULL INVOICE MODAL */
     function viewInvoiceDetails(id) {
-      if(!db) return;
-      let tx = db.transaction("logs", "readonly");
-      tx.objectStore("logs").get(id).onsuccess = function(e) {
-        let log = e.target.result;
-        if(!log) return;
+      let log = allLogs.find(l => l.id === id);
+      if(!log) return;
 
-        document.getElementById('modal-title').textContent = `${log.type} Invoice: ${log.invNum || 'N/A'}`;
-        document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${log.date}`;
+      document.getElementById('modal-title').textContent = `${log.type} Invoice: ${log.invNum || 'N/A'}`;
+      document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${log.date}`;
 
-        let tbody = document.querySelector("#modal-items-table tbody");
-        tbody.innerHTML = '';
+      let tbody = document.querySelector("#modal-items-table tbody");
+      tbody.innerHTML = '';
 
-        let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate || log.cost, total: log.total }];
+      let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate || log.cost, total: log.total }];
 
-        itemsList.forEach(i => {
-          let tr = document.createElement('tr');
-          let rateVal = i.rate || i.cost || 0;
-          tr.innerHTML = `<td><b>${i.name}</b></td><td>${i.qty}</td><td>₹${rateVal}</td><td>₹${i.total}</td>`;
-          tbody.appendChild(tr);
-        });
+      itemsList.forEach(i => {
+        let tr = document.createElement('tr');
+        let rateVal = i.rate || i.cost || 0;
+        tr.innerHTML = `<td><b>${i.name}</b></td><td>${i.qty}</td><td>₹${rateVal}</td><td>₹${i.total}</td>`;
+        tbody.appendChild(tr);
+      });
 
-        let subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
-        let misc = log.miscCharges || 0;
-        let due = log.total - (log.paid || 0);
+      let subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
+      let misc = log.miscCharges || 0;
+      let due = log.total - (log.paid || 0);
 
-        document.getElementById('modal-summary-box').innerHTML = `
-          <div>Items Subtotal: <b>₹${subtotal}</b></div>
-          ${misc ? `<div>Freight / Misc Charges: <b>₹${misc}</b></div>` : ''}
-          <div style="font-size:1rem; color:#111827; margin-top:4px;">Grand Total: <b>₹${log.total}</b></div>
-          <div style="color:#059669;">Amount Paid: ₹${log.paid || 0}</div>
-          <div style="color:#dc2626;">Balance Due: ₹${due}</div>
-        `;
+      document.getElementById('modal-summary-box').innerHTML = `
+        <div>Items Subtotal: <b>₹${subtotal}</b></div>
+        ${misc ? `<div>Freight / Misc Charges: <b>₹${misc}</b></div>` : ''}
+        <div style="font-size:1rem; color:#111827; margin-top:4px;">Grand Total: <b>₹${log.total}</b></div>
+        <div style="color:#059669;">Amount Paid: ₹${log.paid || 0}</div>
+        <div style="color:#dc2626;">Balance Due: ₹${due}</div>
+      `;
 
-        document.getElementById('invoice-modal').classList.remove('hidden');
-      };
+      document.getElementById('invoice-modal').classList.remove('hidden');
     }
 
     function closeInvoiceModal() {
       document.getElementById('invoice-modal').classList.add('hidden');
     }
 
-    function editInvoiceEntry(id) {
-      if(!db) return;
-      let tx = db.transaction("logs", "readonly");
-      tx.objectStore("logs").get(id).onsuccess = function(e) {
-        let log = e.target.result;
-        if(!log) return;
+    async function editInvoiceEntry(id) {
+      let log = allLogs.find(l => l.id === id);
+      if(!log) return;
 
-        let newTotal = prompt("Edit Invoice Total Amount (₹):", log.total);
-        let newPaid = prompt("Edit Paid Amount (₹):", log.paid || 0);
+      let newTotal = prompt("Edit Invoice Total Amount (₹):", log.total);
+      let newPaid = prompt("Edit Paid Amount (₹):", log.paid || 0);
 
-        if(log.items && log.items.length > 0) {
-          log.items.forEach(item => {
-            let newQty = prompt(`Edit Quantity for "${item.name}":`, item.qty);
-            let newRate = prompt(`Edit Rate for "${item.name}" (₹):`, item.rate || item.cost);
-            if(newQty !== null) item.qty = parseInt(newQty) || item.qty;
-            if(newRate !== null) {
-              if(log.type === 'SALE') item.rate = parseFloat(newRate) || item.rate;
-              else item.cost = parseFloat(newRate) || item.cost;
-            }
-          });
-        }
-
-        if(newTotal !== null && newPaid !== null) {
-          let updateTx = db.transaction("logs", "readwrite");
-          log.total = parseFloat(newTotal) || log.total;
-          log.paid = parseFloat(newPaid) || 0;
-          updateTx.objectStore("logs").put(log).onsuccess = function() {
-            alert("Invoice Updated!");
-            renderHistoryTable();
-          };
-        }
-      };
+      if(newTotal !== null && newPaid !== null) {
+        await rtdb.ref("logs/" + id).update({
+          total: parseFloat(newTotal) || log.total,
+          paid: parseFloat(newPaid) || 0
+        });
+        alert("Invoice Updated!");
+      }
     }
 
-    function deleteInvoiceEntry(id) {
-      if(!db) return;
-      if(!confirm("Delete this entire invoice? Associated quantities will be reversed.")) return;
-
-      let tx = db.transaction("logs", "readwrite");
-      tx.objectStore("logs").delete(id).onsuccess = function() {
-        alert("Invoice Deleted!");
-        renderHistoryTable();
-      };
+    async function deleteInvoiceEntry(id) {
+      if(!confirm("Delete this entire invoice?")) return;
+      await rtdb.ref("logs/" + id).remove();
+      alert("Invoice Deleted!");
     }
 
     function renderStockSummary() {
-      if(!db) return;
-      let tx = db.transaction(["items", "logs"], "readonly");
-      
-      tx.objectStore("items").getAll().onsuccess = function(e) {
-        let items = e.target.result || [];
-        renderCategorySummary(items);
-        renderStockSummaryTable('', items);
-      };
+      renderCategorySummary(allItems);
+      renderStockSummaryTable('', allItems);
 
-      tx.objectStore("logs").getAll().onsuccess = function(e) {
-        let logs = e.target.result || [];
-        let totalSales = logs.filter(l => l.type === 'SALE').reduce((sum, l) => sum + l.total, 0);
-        let totalPurchases = logs.filter(l => l.type === 'PURCHASE').reduce((sum, l) => sum + l.total, 0);
-        document.getElementById('stat-sales').textContent = '₹' + totalSales;
-        document.getElementById('stat-purchases').textContent = '₹' + totalPurchases;
-      };
+      let totalSales = allLogs.filter(l => l.type === 'SALE').reduce((sum, l) => sum + l.total, 0);
+      let totalPurchases = allLogs.filter(l => l.type === 'PURCHASE').reduce((sum, l) => sum + l.total, 0);
+      
+      let sEl = document.getElementById('stat-sales');
+      let pEl = document.getElementById('stat-purchases');
+      if(sEl) sEl.textContent = '₹' + totalSales;
+      if(pEl) pEl.textContent = '₹' + totalPurchases;
     }
 
     function renderCategorySummary(items) {
@@ -767,6 +738,7 @@
       });
 
       let tbody = document.querySelector("#category-summary-table tbody");
+      if(!tbody) return;
       tbody.innerHTML = '';
       for (let cat in catMap) {
         let tr = document.createElement('tr');
@@ -778,10 +750,11 @@
     function renderStockSummaryTable(query, itemsList) {
       if(!itemsList) itemsList = allItems;
       let tbody = document.querySelector("#stock-summary-table tbody");
+      if(!tbody) return;
       tbody.innerHTML = '';
 
-      let filtered = itemsList.filter(i => 
-        i.name.toLowerCase().includes(query.toLowerCase()) || 
+      let filtered = itemsList.filter(i =>
+        i.name.toLowerCase().includes(query.toLowerCase()) ||
         (i.category && i.category.toLowerCase().includes(query.toLowerCase()))
       );
 
@@ -799,46 +772,36 @@
           <td style="color:#dc2626;">-${sold}</td>
           <td><b>${closing}</b></td>
           <td>
-            <button class="btn-edit" onclick="editItem('${item.name}')">Edit</button>
-            <button class="btn-danger" onclick="deleteItem('${item.name}')">Del</button>
+            <button class="btn-edit" onclick="editItem('${item.key}')">Edit</button>
+            <button class="btn-danger" onclick="deleteItem('${item.key}')">Del</button>
           </td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    function editItem(itemName) {
-      if(!db) return;
-      let tx = db.transaction("items", "readonly");
-      tx.objectStore("items").get(itemName).onsuccess = function(e) {
-        let item = e.target.result;
-        if(!item) return;
+    async function editItem(key) {
+      let item = allItems.find(i => i.key === key);
+      if(!item) return;
 
-        let newOpening = prompt("Edit Opening Stock Qty:", item.openingStock || 0);
-        let newCost = prompt("Edit Purchase Rate (₹):", item.costPrice || 0);
-        let newSelling = prompt("Edit Selling Price (₹):", item.sellingPrice || 0);
+      let newOpening = prompt("Edit Opening Stock Qty:", item.openingStock || 0);
+      let newCost = prompt("Edit Purchase Rate (₹):", item.costPrice || 0);
+      let newSelling = prompt("Edit Selling Price (₹):", item.sellingPrice || 0);
 
-        if(newOpening !== null && newSelling !== null) {
-          let updateTx = db.transaction("items", "readwrite");
-          item.openingStock = parseInt(newOpening) || 0;
-          item.costPrice = parseFloat(newCost) || 0;
-          item.sellingPrice = parseFloat(newSelling) || 0;
-          updateTx.objectStore("items").put(item).onsuccess = function() {
-            alert("Item details updated!");
-            renderStockSummary();
-          };
-        }
-      };
+      if(newOpening !== null && newSelling !== null) {
+        await rtdb.ref("items/" + key).update({
+          openingStock: parseInt(newOpening) || 0,
+          costPrice: parseFloat(newCost) || 0,
+          sellingPrice: parseFloat(newSelling) || 0
+        });
+        alert("Item details updated!");
+      }
     }
 
-    function deleteItem(itemName) {
-      if(!db) return;
-      if(!confirm(`Delete item "${itemName}"?`)) return;
-      let tx = db.transaction("items", "readwrite");
-      tx.objectStore("items").delete(itemName).onsuccess = function() {
-        alert("Item deleted!");
-        renderStockSummary();
-      };
+    async function deleteItem(key) {
+      if(!confirm("Delete this item permanently?")) return;
+      await rtdb.ref("items/" + key).remove();
+      alert("Item deleted!");
     }
   </script>
 </body>
