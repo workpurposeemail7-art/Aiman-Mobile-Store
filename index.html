@@ -77,8 +77,9 @@
     <div id="tab-sales" class="tab-content">
       <div class="card">
         <h3>Record Sale</h3>
-        <label>Customer Name</label>
-        <input type="text" id="s-customer" placeholder="e.g. John Doe">
+        <label>Customer Name (Select Existing or Type New)</label>
+        <input type="text" id="s-customer" list="customer-list" placeholder="e.g. John Doe">
+        <datalist id="customer-list"></datalist>
 
         <label>Paid Amount (₹)</label>
         <input type="number" id="s-paid" value="0">
@@ -125,7 +126,8 @@
           </div>
           <div style="flex: 1;">
             <label>Supplier / Vendor</label>
-            <input type="text" id="p-supplier" placeholder="e.g. ABC Wholesalers">
+            <input type="text" id="p-supplier" list="supplier-list" placeholder="e.g. ABC Wholesalers">
+            <datalist id="supplier-list"></datalist>
           </div>
         </div>
 
@@ -350,6 +352,7 @@
       allLogs = Object.keys(data).map(key => ({ id: key, ...data[key] }));
       renderHistoryTable();
       renderPartyDropdown();
+      populatePartyAutoSuggest();
       renderStockSummary();
     });
 
@@ -371,6 +374,31 @@
       if(tabName === 'history') renderHistoryTable();
       if(tabName === 'accounts') renderPartyDropdown();
       if(tabName === 'lookup') renderItemDirectory('');
+    }
+
+    // Auto-suggest dropdown list for existing customers & suppliers
+    function populatePartyAutoSuggest() {
+      let customers = [...new Set(allLogs.filter(l => l.type === 'SALE').map(l => l.party))];
+      let cList = document.getElementById('customer-list');
+      if(cList) {
+        cList.innerHTML = '';
+        customers.forEach(c => {
+          let opt = document.createElement('option');
+          opt.value = c;
+          cList.appendChild(opt);
+        });
+      }
+
+      let suppliers = [...new Set(allLogs.filter(l => l.type === 'PURCHASE').map(l => l.party))];
+      let sList = document.getElementById('supplier-list');
+      if(sList) {
+        sList.innerHTML = '';
+        suppliers.forEach(s => {
+          let opt = document.createElement('option');
+          opt.value = s;
+          sList.appendChild(opt);
+        });
+      }
     }
 
     function filterItems(selectId, query) {
@@ -710,10 +738,30 @@
       }
     }
 
+    // FIX 1: Complete reversal of stock quantities on invoice deletion
     async function deleteInvoiceEntry(id) {
-      if(!confirm("Delete this entire invoice?")) return;
+      let log = allLogs.find(l => l.id === id);
+      if(!log) return;
+
+      if(!confirm("Delete this entire invoice? Quantities will be reversed in stock.")) return;
+
+      let itemsList = log.items || [{ name: log.item, qty: log.qty }];
+
+      for(let cartItem of itemsList) {
+        let existing = allItems.find(i => i.name === cartItem.name);
+        if(existing) {
+          if(log.type === 'SALE') {
+            let reversedSold = Math.max(0, (existing.soldQty || 0) - cartItem.qty);
+            await rtdb.ref("items/" + existing.key).update({ soldQty: reversedSold });
+          } else if(log.type === 'PURCHASE') {
+            let reversedPurchased = Math.max(0, (existing.purchasedQty || 0) - cartItem.qty);
+            await rtdb.ref("items/" + existing.key).update({ purchasedQty: reversedPurchased });
+          }
+        }
+      }
+
       await rtdb.ref("logs/" + id).remove();
-      alert("Invoice Deleted!");
+      alert("Invoice Deleted & Stock Quantity Restored!");
     }
 
     function renderStockSummary() {
