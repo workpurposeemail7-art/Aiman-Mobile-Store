@@ -52,6 +52,10 @@
     .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .badge-sale { background: #dcfce7; color: #15803d; }
     .badge-purchase { background: #fee2e2; color: #b91c1c; }
+    .badge-return { background: #fef3c7; color: #d97706; }
+
+    .checkbox-wrap { display: flex; align-items: center; gap: 8px; margin-top: 10px; background: #fffbe3; padding: 8px; border-radius: 6px; border: 1px solid #fde68a; }
+    .checkbox-wrap input { width: auto; }
 
     /* Modal Overlay */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
@@ -78,6 +82,12 @@
     <div id="tab-sales" class="tab-content">
       <div class="card">
         <h3>Record Sale</h3>
+        
+        <div class="checkbox-wrap">
+          <input type="checkbox" id="s-is-return">
+          <label for="s-is-return" style="margin:0; cursor:pointer;"><b>Mark as Sales Return</b> (Customer returning item)</label>
+        </div>
+
         <label>Select Customer</label>
         <select id="s-customer-select" onchange="togglePartyInput('s-customer-select', 's-customer-new-wrap')">
           <option value="">-- Select Existing Customer --</option>
@@ -89,7 +99,7 @@
           <input type="text" id="s-customer-new" placeholder="Enter new customer name">
         </div>
 
-        <label>Paid Amount (₹)</label>
+        <label>Paid / Refunded Amount (₹)</label>
         <input type="number" id="s-paid" value="0">
 
         <hr style="margin-top:12px;">
@@ -119,7 +129,7 @@
           </div>
         </div>
 
-        <button class="btn btn-blue" style="margin-top:15px;" onclick="submitFinalSale()">Complete Sale Transaction</button>
+        <button class="btn btn-blue" style="margin-top:15px;" onclick="submitFinalSale()">Complete Transaction</button>
       </div>
     </div>
 
@@ -127,6 +137,12 @@
     <div id="tab-purchase" class="tab-content hidden">
       <div class="card">
         <h3>Add Purchase Invoice</h3>
+        
+        <div class="checkbox-wrap">
+          <input type="checkbox" id="p-is-return">
+          <label for="p-is-return" style="margin:0; cursor:pointer;"><b>Mark as Purchase Return</b> (Returning item to supplier)</label>
+        </div>
+
         <div style="display: flex; gap: 8px;">
           <div style="flex: 1;">
             <label>Invoice Number</label>
@@ -148,7 +164,7 @@
 
         <div style="display: flex; gap: 8px;">
           <div style="flex: 1;">
-            <label>Paid Amount (₹)</label>
+            <label>Paid / Refund Amount (₹)</label>
             <input type="number" id="p-paid" value="0">
           </div>
           <div style="flex: 1;">
@@ -171,7 +187,7 @@
             <input type="number" id="p-opening" value="0">
           </div>
           <div style="flex: 1;">
-            <label>Qty Purchased</label>
+            <label>Qty Purchased / Returned</label>
             <input type="number" id="p-qty" value="1" min="1">
           </div>
         </div>
@@ -197,7 +213,7 @@
           </div>
         </div>
 
-        <button class="btn btn-green" style="margin-top:15px;" onclick="submitFinalPurchase()">Save Purchase Invoice</button>
+        <button class="btn btn-green" style="margin-top:15px;" onclick="submitFinalPurchase()">Save Purchase Transaction</button>
       </div>
     </div>
 
@@ -274,20 +290,20 @@
     <div id="tab-stock" class="tab-content hidden">
       <div class="stat-grid">
         <div class="stat-card">
-          <div>Total Sales</div>
+          <div>Total Net Sales</div>
           <div class="stat-val text-green" id="stat-sales">₹0</div>
         </div>
         <div class="stat-card">
-          <div>Total Purchases</div>
+          <div>Total Net Purchases</div>
           <div class="stat-val text-red" id="stat-purchases">₹0</div>
         </div>
       </div>
 
-      <!-- BUSINESS PROFITABILITY CARD -->
+      <!-- BUSINESS PROFITABILITY OVERVIEW -->
       <div class="card" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
-        <h3 style="color: #166534;">📈 Business Profitability</h3>
+        <h3 style="color: #166534;">📈 Overall Business Profitability</h3>
         <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.9rem;">
-          <span>Sales Revenue:</span>
+          <span>Net Sales Revenue:</span>
           <b id="prof-sales">₹0</b>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.9rem;">
@@ -299,6 +315,22 @@
           <span>Gross Profit:</span>
           <span id="prof-gross" class="text-green">₹0</span>
         </div>
+      </div>
+
+      <!-- CATEGORY-WISE PROFITABILITY BREAKDOWN -->
+      <div class="card">
+        <h3>📊 Category-Wise Profitability Breakdown</h3>
+        <table id="category-profitability-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Sales (₹)</th>
+              <th>COGS (₹)</th>
+              <th>Gross Profit (₹)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
 
       <div class="card">
@@ -430,7 +462,6 @@
       if(tabName === 'lookup') renderItemDirectory('');
     }
 
-    // Party Dropdowns with Case-Insensitive Uniqueness
     function extractAndRenderParties() {
       customersList = [];
       suppliersList = [];
@@ -438,11 +469,11 @@
       allLogs.forEach(l => {
         if(!l.party) return;
         let partyTrimmed = l.party.trim();
-        if(l.type === 'SALE') {
+        if(l.type === 'SALE' || l.type === 'SALE_RETURN') {
           if(!customersList.some(c => c.toLowerCase() === partyTrimmed.toLowerCase())) {
             customersList.push(partyTrimmed);
           }
-        } else if(l.type === 'PURCHASE') {
+        } else if(l.type === 'PURCHASE' || l.type === 'PURCHASE_RETURN') {
           if(!suppliersList.some(s => s.toLowerCase() === partyTrimmed.toLowerCase())) {
             suppliersList.push(partyTrimmed);
           }
@@ -484,7 +515,7 @@
       return existingMatch || trimmed;
     }
 
-    // Dynamic Stock Calculation Engine
+    // Dynamic Stock Engine factoring Returns
     function calculateStockForItem(itemName) {
       let item = allItems.find(i => i.name.toLowerCase() === itemName.toLowerCase());
       let opening = item ? (item.openingStock || 0) : 0;
@@ -497,7 +528,9 @@
           if(i.name && i.name.toLowerCase() === itemName.toLowerCase()) {
             let q = parseInt(i.qty) || 0;
             if(log.type === 'PURCHASE') totalPurchased += q;
+            if(log.type === 'PURCHASE_RETURN') totalPurchased -= q;
             if(log.type === 'SALE') totalSold += q;
+            if(log.type === 'SALE_RETURN') totalSold -= q;
           }
         });
       });
@@ -555,6 +588,7 @@
     async function submitFinalSale() {
       if(saleCart.length === 0) return alert("Cart is empty!");
       
+      let isReturn = document.getElementById('s-is-return').checked;
       let selectVal = document.getElementById('s-customer-select').value;
       let customerName = '';
 
@@ -569,12 +603,13 @@
       }
 
       let paid = parseFloat(document.getElementById('s-paid').value) || 0;
-      let invNum = "SALE-" + Date.now().toString().slice(-6);
+      let type = isReturn ? 'SALE_RETURN' : 'SALE';
+      let invNum = (isReturn ? "SRET-" : "SALE-") + Date.now().toString().slice(-6);
       let totalBill = saleCart.reduce((a, b) => a + b.total, 0);
 
       await rtdb.ref("logs").push({
         invNum: invNum,
-        type: 'SALE',
+        type: type,
         party: customerName,
         items: saleCart,
         total: totalBill,
@@ -582,8 +617,9 @@
         date: new Date().toLocaleDateString()
       });
 
-      alert("Sale Recorded Successfully!");
+      alert(isReturn ? "Sales Return Recorded!" : "Sale Recorded Successfully!");
       saleCart = [];
+      document.getElementById('s-is-return').checked = false;
       document.getElementById('s-customer-select').value = '';
       document.getElementById('s-customer-new').value = '';
       document.getElementById('s-customer-new-wrap').classList.add('hidden');
@@ -622,7 +658,9 @@
 
     async function submitFinalPurchase() {
       if(purchaseCart.length === 0) return alert("No purchase items added!");
-      let invNum = document.getElementById('p-inv-num').value.trim() || "PUR-" + Date.now().toString().slice(-6);
+      let isReturn = document.getElementById('p-is-return').checked;
+      let prefix = isReturn ? "PRET-" : "PUR-";
+      let invNum = document.getElementById('p-inv-num').value.trim() || prefix + Date.now().toString().slice(-6);
       
       let selectVal = document.getElementById('p-supplier-select').value;
       let supplierName = '';
@@ -641,6 +679,7 @@
       let miscCharges = parseFloat(document.getElementById('p-misc').value) || 0;
       let subTotal = purchaseCart.reduce((sum, item) => sum + item.total, 0);
       let grandTotal = subTotal + miscCharges;
+      let type = isReturn ? 'PURCHASE_RETURN' : 'PURCHASE';
 
       for(let cartItem of purchaseCart) {
         let itemRatio = subTotal > 0 ? (cartItem.total / subTotal) : (1 / purchaseCart.length);
@@ -667,7 +706,7 @@
 
       await rtdb.ref("logs").push({
         invNum: invNum,
-        type: 'PURCHASE',
+        type: type,
         party: supplierName,
         items: purchaseCart,
         miscCharges: miscCharges,
@@ -676,8 +715,9 @@
         date: new Date().toLocaleDateString()
       });
 
-      alert("Purchase Invoice Saved!");
+      alert(isReturn ? "Purchase Return Recorded!" : "Purchase Invoice Saved!");
       purchaseCart = [];
+      document.getElementById('p-is-return').checked = false;
       document.getElementById('p-inv-num').value = '';
       document.getElementById('p-supplier-select').value = '';
       document.getElementById('p-supplier-new').value = '';
@@ -745,11 +785,12 @@
       let totalPaid = 0;
 
       logs.forEach(l => {
-        totalBill += l.total;
-        totalPaid += (l.paid || 0);
+        let sign = (l.type === 'SALE_RETURN' || l.type === 'PURCHASE_RETURN') ? -1 : 1;
+        totalBill += (l.total * sign);
+        totalPaid += ((l.paid || 0) * sign);
 
         let tr = document.createElement('tr');
-        tr.innerHTML = `<td>${l.date}</td><td>Inv: ${l.invNum || '-'}</td><td>₹${l.total}</td><td>₹${l.paid || 0}</td>`;
+        tr.innerHTML = `<td>${l.date}</td><td>${l.type}: ${l.invNum || '-'}</td><td>₹${l.total * sign}</td><td>₹${(l.paid || 0) * sign}</td>`;
         tbody.appendChild(tr);
       });
 
@@ -788,7 +829,9 @@
 
       [...allLogs].reverse().forEach(log => {
         let tr = document.createElement('tr');
-        let badgeClass = log.type === 'SALE' ? 'badge-sale' : 'badge-purchase';
+        let badgeClass = 'badge-sale';
+        if(log.type === 'PURCHASE') badgeClass = 'badge-purchase';
+        if(log.type.includes('RETURN')) badgeClass = 'badge-return';
 
         tr.innerHTML = `
           <td><span class="badge ${badgeClass}">${log.type}</span></td>
@@ -844,7 +887,6 @@
       document.getElementById('invoice-modal').classList.add('hidden');
     }
 
-    // Modal Edit Invoice & Quantity Adjustment
     function openEditModal(id) {
       let log = allLogs.find(l => l.id === id);
       if(!log) return;
@@ -939,31 +981,77 @@
       renderStockSummaryTable('');
       calculateProfitability();
 
-      let totalSales = allLogs.filter(l => l.type === 'SALE').reduce((sum, l) => sum + l.total, 0);
-      let totalPurchases = allLogs.filter(l => l.type === 'PURCHASE').reduce((sum, l) => sum + l.total, 0);
+      let netSales = allLogs.reduce((sum, l) => {
+        if(l.type === 'SALE') return sum + l.total;
+        if(l.type === 'SALE_RETURN') return sum - l.total;
+        return sum;
+      }, 0);
+
+      let netPurchases = allLogs.reduce((sum, l) => {
+        if(l.type === 'PURCHASE') return sum + l.total;
+        if(l.type === 'PURCHASE_RETURN') return sum - l.total;
+        return sum;
+      }, 0);
       
       let sEl = document.getElementById('stat-sales');
       let pEl = document.getElementById('stat-purchases');
-      if(sEl) sEl.textContent = '₹' + totalSales;
-      if(pEl) pEl.textContent = '₹' + totalPurchases;
+      if(sEl) sEl.textContent = '₹' + netSales;
+      if(pEl) pEl.textContent = '₹' + netPurchases;
     }
 
     function calculateProfitability() {
+      let categoryMetrics = {};
+
+      allLogs.forEach(log => {
+        if(log.type === 'SALE' || log.type === 'SALE_RETURN') {
+          let multiplier = log.type === 'SALE_RETURN' ? -1 : 1;
+          let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, total: log.total }];
+          
+          itemsList.forEach(item => {
+            let masterItem = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+            let cat = masterItem ? (masterItem.category || 'General') : 'General';
+            let unitCost = masterItem ? (masterItem.costPrice || 0) : 0;
+
+            let qtySold = (parseInt(item.qty) || 0) * multiplier;
+            let saleTotal = (item.total || (qtySold * (item.rate || 0))) * multiplier;
+            let cogs = qtySold * unitCost;
+
+            if(!categoryMetrics[cat]) {
+              categoryMetrics[cat] = { sales: 0, cogs: 0 };
+            }
+
+            categoryMetrics[cat].sales += saleTotal;
+            categoryMetrics[cat].cogs += cogs;
+          });
+        }
+      });
+
       let totalSalesValue = 0;
       let totalCOGS = 0;
 
-      allLogs.filter(l => l.type === 'SALE').forEach(log => {
-        let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, total: log.total }];
-        itemsList.forEach(item => {
-          let qtySold = parseInt(item.qty) || 0;
-          let saleTotal = item.total || (qtySold * (item.rate || 0));
-          totalSalesValue += saleTotal;
+      let tbody = document.querySelector("#category-profitability-table tbody");
+      if(tbody) tbody.innerHTML = '';
 
-          let masterItem = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
-          let unitCost = masterItem ? (masterItem.costPrice || 0) : 0;
-          totalCOGS += (qtySold * unitCost);
-        });
-      });
+      for(let cat in categoryMetrics) {
+        let s = categoryMetrics[cat].sales;
+        let c = categoryMetrics[cat].cogs;
+        let p = s - c;
+
+        totalSalesValue += s;
+        totalCOGS += c;
+
+        if(tbody) {
+          let tr = document.createElement('tr');
+          let profColor = p < 0 ? 'text-red' : 'text-green';
+          tr.innerHTML = `
+            <td><b>${cat}</b></td>
+            <td>₹${s}</td>
+            <td>₹${c}</td>
+            <td class="${profColor}"><b>₹${p}</b></td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
 
       let grossProfit = totalSalesValue - totalCOGS;
 
