@@ -56,7 +56,6 @@
     .checkbox-wrap { display: flex; align-items: center; gap: 8px; margin-top: 10px; background: #fffbe3; padding: 8px; border-radius: 6px; border: 1px solid #fde68a; }
     .checkbox-wrap input { width: auto; }
 
-    /* Modal Overlay */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
     .modal-card { background: white; width: 90%; max-width: 550px; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 85vh; overflow-y: auto; }
     .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; margin-top: 10px; }
@@ -87,6 +86,13 @@
       <div class="card">
         <h3>Record Sale</h3>
         
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1;">
+            <label>Transaction Date</label>
+            <input type="date" id="s-date">
+          </div>
+        </div>
+
         <div class="checkbox-wrap">
           <input type="checkbox" id="s-is-return">
           <label for="s-is-return" style="margin:0; cursor:pointer;"><b>Mark as Sales Return</b> (Customer returning item)</label>
@@ -150,6 +156,13 @@
       <div class="card">
         <h3>Add Purchase Invoice</h3>
         
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1;">
+            <label>Invoice Date</label>
+            <input type="date" id="p-date">
+          </div>
+        </div>
+
         <div class="checkbox-wrap">
           <input type="checkbox" id="p-is-return">
           <label for="p-is-return" style="margin:0; cursor:pointer;"><b>Mark as Purchase Return</b> (Returning item to supplier)</label>
@@ -317,7 +330,7 @@
         <h3>Invoice History</h3>
         <table id="history-table">
           <thead>
-            <tr><th>Type</th><th>Inv # / Party</th><th>Bill Amt</th><th>Paid</th><th>Actions</th></tr>
+            <tr><th>Date</th><th>Type</th><th>Inv # / Party</th><th>Bill Amt</th><th>Paid</th><th>Actions</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -409,18 +422,18 @@
         <h3>📅 Daily Trends & Performance</h3>
         <div style="display:flex; gap:10px; margin-top:10px;">
           <div style="flex:1;">
-            <label>Filter Date</label>
+            <label>Filter Date (DD/MM/YYYY)</label>
             <input type="date" id="daily-date-filter" onchange="renderDailyTrends()">
           </div>
           <div style="flex:1; display:flex; align-items:flex-end;">
-            <button class="btn btn-blue" onclick="document.getElementById('daily-date-filter').value=''; renderDailyTrends();">Show All Days</button>
+            <button class="btn btn-blue" onclick="clearDateFilter();">Show All Days</button>
           </div>
         </div>
         
         <table style="margin-top:15px;">
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Date (DD/MM/YYYY)</th>
               <th>Sales (₹)</th>
               <th>Purchases (₹)</th>
               <th>Est. Profit (₹)</th>
@@ -475,7 +488,7 @@
       </div>
 
       <div class="card">
-        <h3>⚠️ Items Needing Restock Quickly (Stock &le; 3)</h3>
+        <h3>⚠️ Items Needing Restock Quickly (Stock ≤ 3)</h3>
         <table>
           <thead>
             <tr><th>Item</th><th>Category</th><th>Current Stock</th></tr>
@@ -535,6 +548,9 @@
       <h3>Edit Invoice Entry</h3>
       <input type="hidden" id="edit-log-id">
       
+      <label>Transaction Date</label>
+      <input type="date" id="edit-date">
+
       <label>Party Name</label>
       <input type="text" id="edit-party">
 
@@ -568,6 +584,9 @@
       <h3>Edit Payment Entry</h3>
       <input type="hidden" id="edit-pay-id">
       
+      <label>Payment Date</label>
+      <input type="date" id="edit-pay-date">
+
       <label>Party Name</label>
       <input type="text" id="edit-pay-party" readonly>
 
@@ -606,6 +625,7 @@ let allLogs = [];
 let allPayments = [];
 let customersList = [];
 let suppliersList = [];
+let dbListenerRefs = [];
 
 /* -------------------- COMMON HELPERS -------------------- */
 
@@ -615,8 +635,8 @@ function num(v) {
 }
 
 function qty(v) {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
 function clean(v) {
@@ -634,14 +654,31 @@ function normalizeType(log) {
 
 function getLogDate(log) {
   const d = log?.date || log?.createdAt || log?.timestamp || log?.time;
+  if (!d) return new Date();
   const parsed = new Date(d);
-  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
 function formatDateISO(d) {
   const dateObj = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(dateObj.getTime())) return '1970-01-01';
   return dateObj.toISOString().split('T')[0];
+}
+
+function formatDateDDMMYYYY(d) {
+  const dateObj = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(dateObj.getTime())) return '01/01/1970';
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const year = dateObj.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function parseDateInput(dateStr) {
+  // Converts HTML date input (YYYY-MM-DD) to Date object at midnight local time
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
 }
 
 function getLogItems(log) {
@@ -798,7 +835,7 @@ function calculateInventoryAndCOGS() {
       name: i.name,
       category: i.category,
       qty: openQty,
-      avgCost: openCost,
+      avgCost: openCost > 0 ? openCost : 0,
       openingQty: openQty,
       openingCost: openCost,
       qtyIn: 0,
@@ -842,6 +879,7 @@ function calculateInventoryAndCOGS() {
         };
 
         current.qty = Math.max(0, current.qty - q);
+        current.qtyOut += q;
         stockMap.set(key, current);
       });
     } else if (type === 'SALE') {
@@ -857,11 +895,12 @@ function calculateInventoryAndCOGS() {
         const lineCOGS = q * unitCost;
 
         totalLogCOGS += lineCOGS;
-        current.qty -= q;
+        current.qty = Math.max(0, current.qty - q);
         current.qtyOut += q;
         current.cogs += lineCOGS;
         stockMap.set(key, current);
       });
+      logCOGSMap.set(log.id, totalLogCOGS);
     } else if (type === 'SALE_RETURN') {
       getLogItems(log).forEach(item => {
         const name = getItemName(item);
@@ -876,13 +915,12 @@ function calculateInventoryAndCOGS() {
 
         totalLogCOGS -= lineCOGS;
         current.qty += q;
-        current.qtyOut -= q;
+        current.qtyIn += q;
         current.cogs -= lineCOGS;
         stockMap.set(key, current);
       });
+      logCOGSMap.set(log.id, totalLogCOGS);
     }
-
-    if (log.id) logCOGSMap.set(log.id, totalLogCOGS);
   });
 
   return { stockMap, logCOGSMap };
@@ -891,19 +929,25 @@ function calculateInventoryAndCOGS() {
 /* -------------------- INITIALIZATION & FIREBASE -------------------- */
 
 window.addEventListener('DOMContentLoaded', () => {
-  rtdb.ref('items').on('value', snap => {
+  // Set today's date in all date fields
+  const today = new Date();
+  document.getElementById('s-date').valueAsDate = today;
+  document.getElementById('p-date').valueAsDate = today;
+  document.getElementById('daily-date-filter').valueAsDate = today;
+
+  const itemsRef = rtdb.ref('items').on('value', snap => {
     const val = snap.val() || {};
     allItems = Object.keys(val).map(k => ({ id: k, ...val[k] }));
     refreshAllUI();
   });
 
-  rtdb.ref('logs').on('value', snap => {
+  const logsRef = rtdb.ref('logs').on('value', snap => {
     const val = snap.val() || {};
     allLogs = Object.keys(val).map(k => ({ id: k, ...val[k] }));
     refreshAllUI();
   });
 
-  rtdb.ref('payments').on('value', snap => {
+  const paymentsRef = rtdb.ref('payments').on('value', snap => {
     const val = snap.val() || {};
     allPayments = Object.keys(val).map(k => ({ id: k, ...val[k] }));
     refreshAllUI();
@@ -964,13 +1008,13 @@ function populateDropdowns() {
   const oldSSel = sSel.value;
   sSel.innerHTML = `<option value="">-- Select Existing Customer --</option><option value="__NEW__">+ Add New Customer</option>` +
     customersList.map(c => `<option value="${c}">${c}</option>`).join('');
-  sSel.value = oldSSel;
+  if (oldSSel) sSel.value = oldSSel;
 
   const pSel = document.getElementById('p-supplier-select');
   const oldPSel = pSel.value;
   pSel.innerHTML = `<option value="">-- Select Existing Supplier --</option><option value="__NEW__">+ Add New Supplier</option>` +
     suppliersList.map(s => `<option value="${s}">${s}</option>`).join('');
-  pSel.value = oldPSel;
+  if (oldPSel) pSel.value = oldPSel;
 
   filterItems('s-item', '');
   renderPartyDropdown();
@@ -1007,7 +1051,16 @@ function addItemToSaleCart() {
     return;
   }
 
-  saleCart.push({ name: itemVal, qty: q, rate: r, total: q * r });
+  // Check if item already exists in cart
+  const existingItem = saleCart.find(i => clean(i.name) === clean(itemVal));
+  if (existingItem) {
+    existingItem.qty += q;
+    existingItem.total = existingItem.qty * existingItem.rate;
+  } else {
+    saleCart.push({ name: itemVal, qty: q, rate: r, total: q * r });
+  }
+
+  document.getElementById('s-qty').value = 1;
   renderSaleCart();
 }
 
@@ -1017,7 +1070,7 @@ function renderSaleCart() {
   container.innerHTML = saleCart.map((item, idx) => {
     grand += item.total;
     return `<div class="cart-item">
-      <span>${item.name} (${item.qty} x ₹${item.rate})</span>
+      <span>${item.name} (${item.qty} x ₹${item.rate.toFixed(2)})</span>
       <b>₹${item.total.toFixed(2)}</b>
       <button class="btn-danger" onclick="saleCart.splice(${idx}, 1); renderSaleCart();">X</button>
     </div>`;
@@ -1040,24 +1093,35 @@ function submitFinalSale() {
   const discount = num(document.getElementById('s-discount').value);
   const gross = saleCart.reduce((s, i) => s + i.total, 0);
 
+  const saleDate = document.getElementById('s-date').value;
+  const transactionDate = saleDate ? parseDateInput(saleDate).toISOString() : new Date().toISOString();
+
   const payload = {
     type: isReturn ? 'SALE_RETURN' : 'SALE',
     party,
-    items: saleCart,
+    items: saleCart.map(item => ({ ...item })),
     grandTotal: gross,
     discount,
     paidAmount: paid,
-    date: new Date().toISOString()
+    date: transactionDate
   };
 
   rtdb.ref('logs').push(payload, err => {
-    if (err) alert("Error saving transaction!");
-    else {
+    if (err) {
+      console.error('Error:', err);
+      alert("Error saving transaction!");
+    } else {
       alert("Sale Transaction Saved Successfully!");
       saleCart = [];
+      document.getElementById('s-date').valueAsDate = new Date();
       document.getElementById('s-paid').value = 0;
       document.getElementById('s-discount').value = 0;
+      document.getElementById('s-customer-select').value = '';
       document.getElementById('s-customer-new').value = '';
+      document.getElementById('s-is-return').checked = false;
+      document.getElementById('s-item').value = '';
+      document.getElementById('s-qty').value = 1;
+      document.getElementById('s-rate').value = 0;
       renderSaleCart();
     }
   });
@@ -1079,11 +1143,15 @@ function addItemToPurchaseCart() {
 
   const existing = getCatalogItem(name);
   if (!existing) {
-    rtdb.ref('items').push({ name, category, openingStock, purchaseRate: cost, sellingPrice: sell });
+    rtdb.ref('items').push({ name, category, openingStock, purchaseRate: cost, sellingPrice: sell }, err => {
+      if (err) console.error('Error adding item:', err);
+    });
   }
 
   document.getElementById('p-name').value = '';
+  document.getElementById('p-category').value = '';
   document.getElementById('p-opening').value = 0;
+  document.getElementById('p-qty').value = 1;
   renderPurchaseCart();
 }
 
@@ -1094,7 +1162,7 @@ function renderPurchaseCart() {
   container.innerHTML = purchaseCart.map((item, idx) => {
     subtotal += item.total;
     return `<div class="cart-item">
-      <span>${item.name} [${item.category}] (${item.qty} x ₹${item.cost})</span>
+      <span>${item.name} [${item.category}] (${item.qty} x ₹${item.cost.toFixed(2)})</span>
       <b>₹${item.total.toFixed(2)}</b>
       <button class="btn-danger" onclick="purchaseCart.splice(${idx}, 1); renderPurchaseCart();">X</button>
     </div>`;
@@ -1123,28 +1191,36 @@ function submitFinalPurchase() {
   const misc = num(document.getElementById('p-misc').value);
   const gross = purchaseCart.reduce((s, i) => s + i.total, 0);
 
+  const purchaseDate = document.getElementById('p-date').value;
+  const transactionDate = purchaseDate ? parseDateInput(purchaseDate).toISOString() : new Date().toISOString();
+
   const payload = {
     type: isReturn ? 'PURCHASE_RETURN' : 'PURCHASE',
     party,
     invoiceNumber: invNum,
-    items: purchaseCart,
+    items: purchaseCart.map(item => ({ ...item })),
     grandTotal: gross,
     discount,
     miscCharges: misc,
     paidAmount: paid,
-    date: new Date().toISOString()
+    date: transactionDate
   };
 
   rtdb.ref('logs').push(payload, err => {
-    if (err) alert("Error saving purchase!");
-    else {
+    if (err) {
+      console.error('Error:', err);
+      alert("Error saving purchase!");
+    } else {
       alert("Purchase Transaction Saved Successfully!");
       purchaseCart = [];
+      document.getElementById('p-date').valueAsDate = new Date();
       document.getElementById('p-paid').value = 0;
       document.getElementById('p-discount').value = 0;
       document.getElementById('p-misc').value = 0;
       document.getElementById('p-inv-num').value = '';
+      document.getElementById('p-supplier-select').value = '';
       document.getElementById('p-supplier-new').value = '';
+      document.getElementById('p-is-return').checked = false;
       renderPurchaseCart();
     }
   });
@@ -1260,7 +1336,7 @@ function renderPartyStatement() {
 
   tbody.innerHTML = combined.map(row => {
     return `<tr>
-      <td>${formatDateISO(row.date)}</td>
+      <td>${formatDateDDMMYYYY(row.date)}</td>
       <td><span class="badge ${row.type.includes('SALE') || row.type === 'CASH_IN' ? 'badge-sale' : 'badge-purchase'}">${row.type}</span></td>
       <td>${row.desc}</td>
       <td>₹${row.amount.toFixed(2)}</td>
@@ -1318,8 +1394,10 @@ function savePartyPayment() {
   };
 
   rtdb.ref('payments').push(payload, err => {
-    if (err) alert("Failed to record payment!");
-    else {
+    if (err) {
+      console.error('Error:', err);
+      alert("Failed to record payment!");
+    } else {
       alert("Payment recorded!");
       document.getElementById('party-adjust-amount').value = '';
     }
@@ -1329,7 +1407,14 @@ function savePartyPayment() {
 function deleteEntry(kind, id) {
   if (!confirm("Are you sure you want to delete this record?")) return;
   const path = kind === 'LOG' ? `logs/${id}` : `payments/${id}`;
-  rtdb.ref(path).remove();
+  rtdb.ref(path).remove(err => {
+    if (err) {
+      console.error('Error:', err);
+      alert("Error deleting entry!");
+    } else {
+      alert("Entry deleted successfully!");
+    }
+  });
 }
 
 /* -------------------- INVOICE HISTORY & MODALS -------------------- */
@@ -1345,6 +1430,7 @@ function renderInvoiceHistory() {
     const paid = getPaidAmount(l);
 
     return `<tr>
+      <td>${formatDateDDMMYYYY(getLogDate(l))}</td>
       <td><span class="badge ${type.includes('SALE') ? 'badge-sale' : 'badge-purchase'}">${type}</span></td>
       <td><b>${party}</b><br><small style="color:#6b7280">${l.invoiceNumber || 'N/A'}</small></td>
       <td>₹${net.toFixed(2)}</td>
@@ -1364,7 +1450,7 @@ function openInvoiceModal(logId) {
 
   const type = normalizeType(log);
   document.getElementById('modal-title').innerText = `${type} Details`;
-  document.getElementById('modal-subtitle').innerText = `Party: ${getParty(log)} | Date: ${formatDateISO(getLogDate(log))}`;
+  document.getElementById('modal-subtitle').innerText = `Party: ${getParty(log)} | Date: ${formatDateDDMMYYYY(getLogDate(log))}`;
 
   const tbody = document.querySelector('#modal-items-table tbody');
   const items = getLogItems(log);
@@ -1384,11 +1470,12 @@ function openInvoiceModal(logId) {
   const disc = num(log.discount);
   const net = getNetAmount(log);
   const paid = getPaidAmount(log);
+  const misc = num(log.miscCharges ?? log.freight ?? 0);
 
   document.getElementById('modal-summary-box').innerHTML = `
     <div>Gross Total: <b>₹${gross.toFixed(2)}</b></div>
     <div>Discount: <b>-₹${disc.toFixed(2)}</b></div>
-    <div>Freight/Misc: <b>+₹${num(log.miscCharges ?? log.freight).toFixed(2)}</b></div>
+    <div>Freight/Misc: <b>+₹${misc.toFixed(2)}</b></div>
     <div style="font-size:1rem; font-weight:bold; margin-top:4px;">Net Payable: ₹${net.toFixed(2)}</div>
     <div style="color:#16a34a;">Amount Paid: ₹${paid.toFixed(2)}</div>
     <div style="color:#dc2626;">Balance Due: ₹${(net - paid).toFixed(2)}</div>
@@ -1406,18 +1493,22 @@ function openEditModal(logId) {
   if (!log) return;
 
   document.getElementById('edit-log-id').value = logId;
+  document.getElementById('edit-date').valueAsDate = getLogDate(log);
   document.getElementById('edit-party').value = getParty(log);
   document.getElementById('edit-paid').value = getPaidAmount(log);
   document.getElementById('edit-discount').value = num(log.discount);
-  document.getElementById('edit-misc').value = num(log.miscCharges ?? log.freight);
+  document.getElementById('edit-misc').value = num(log.miscCharges ?? log.freight ?? 0);
 
   const container = document.getElementById('edit-items-container');
   const items = getLogItems(log);
+  const type = normalizeType(log);
 
   container.innerHTML = items.map((it, idx) => `
     <div style="border-bottom:1px solid #e5e7eb; padding:6px 0;">
       <label>Item Name</label>
       <input type="text" class="edit-item-name" value="${getItemName(it)}">
+      <label>Category</label>
+      <input type="text" class="edit-item-category" value="${it.category || getItemCategory(getItemName(it))}">
       <div style="display:flex; gap:8px;">
         <div style="flex:1;">
           <label>Qty</label>
@@ -1425,7 +1516,7 @@ function openEditModal(logId) {
         </div>
         <div style="flex:1;">
           <label>Rate / Cost (₹)</label>
-          <input type="number" class="edit-item-rate" value="${getItemBaseRate(it, normalizeType(log))}">
+          <input type="number" class="edit-item-rate" value="${getItemBaseRate(it, type).toFixed(2)}">
         </div>
       </div>
     </div>
@@ -1443,12 +1534,19 @@ function saveEditedInvoice() {
   const log = allLogs.find(l => l.id === logId);
   if (!log) return;
 
+  const editDate = document.getElementById('edit-date').value;
+  if (!editDate) {
+    alert("Please select a date for the transaction!");
+    return;
+  }
+
   const party = document.getElementById('edit-party').value.trim();
   const paid = num(document.getElementById('edit-paid').value);
   const discount = num(document.getElementById('edit-discount').value);
   const misc = num(document.getElementById('edit-misc').value);
 
   const nameInputs = document.querySelectorAll('.edit-item-name');
+  const categoryInputs = document.querySelectorAll('.edit-item-category');
   const qtyInputs = document.querySelectorAll('.edit-item-qty');
   const rateInputs = document.querySelectorAll('.edit-item-rate');
 
@@ -1457,18 +1555,22 @@ function saveEditedInvoice() {
 
   nameInputs.forEach((el, idx) => {
     const name = el.value.trim();
+    const cat = categoryInputs[idx].value.trim() || getItemCategory(name);
     const q = qty(qtyInputs[idx].value);
     const r = num(rateInputs[idx].value);
     const tot = q * r;
     gross += tot;
-    items.push({ name, qty: q, rate: r, cost: r, total: tot, category: getItemCategory(name) });
+    items.push({ name, qty: q, rate: r, cost: r, total: tot, category: cat });
   });
 
   const type = normalizeType(log);
   const net = Math.max(0, gross - discount + (type === 'PURCHASE' ? misc : 0));
+  const dateObj = parseDateInput(editDate);
+  const isoDate = dateObj ? dateObj.toISOString() : log.date;
 
   const updatedPayload = {
     ...log,
+    date: isoDate,
     party,
     paidAmount: paid,
     discount,
@@ -1479,8 +1581,10 @@ function saveEditedInvoice() {
   };
 
   rtdb.ref(`logs/${logId}`).set(updatedPayload, err => {
-    if (err) alert("Error updating invoice!");
-    else {
+    if (err) {
+      console.error('Error:', err);
+      alert("Error updating invoice!");
+    } else {
       alert("Invoice updated successfully!");
       closeEditModal();
     }
@@ -1492,6 +1596,7 @@ function openEditPaymentModal(payId) {
   if (!payment) return;
 
   document.getElementById('edit-pay-id').value = payId;
+  document.getElementById('edit-pay-date').valueAsDate = getLogDate(payment);
   document.getElementById('edit-pay-party').value = payment.partyName || payment.party;
   document.getElementById('edit-pay-direction').value = String(payment.direction || payment.type).toUpperCase();
   document.getElementById('edit-pay-amount').value = num(payment.amount);
@@ -1508,18 +1613,29 @@ function saveEditedPayment() {
   const payment = allPayments.find(p => p.id === payId);
   if (!payment) return;
 
+  const editDate = document.getElementById('edit-pay-date').value;
+  if (!editDate) {
+    alert("Please select a date for the payment!");
+    return;
+  }
+
   const direction = document.getElementById('edit-pay-direction').value;
   const amount = num(document.getElementById('edit-pay-amount').value);
+  const dateObj = parseDateInput(editDate);
+  const isoDate = dateObj ? dateObj.toISOString() : payment.date;
 
   const updatedPayload = {
     ...payment,
+    date: isoDate,
     direction,
     amount
   };
 
   rtdb.ref(`payments/${payId}`).set(updatedPayload, err => {
-    if (err) alert("Error updating payment!");
-    else {
+    if (err) {
+      console.error('Error:', err);
+      alert("Error updating payment!");
+    } else {
       alert("Payment updated successfully!");
       closeEditPaymentModal();
     }
@@ -1557,7 +1673,7 @@ function renderStockAndProfitability() {
 
         let entry = categoryProf.get(cat) || { sales: 0, cogs: 0 };
         entry.sales += lineNet * mult;
-        
+
         const catalogItem = getCatalogItem(getItemName(it));
         const unitCost = stockMap.get(clean(getItemName(it)))?.avgCost || num(catalogItem?.purchaseRate);
         entry.cogs += (qty(it.qty) * unitCost) * mult;
@@ -1574,7 +1690,7 @@ function renderStockAndProfitability() {
   document.getElementById('stat-purchases').innerText = `₹${netPurchases.toFixed(2)}`;
   document.getElementById('prof-sales').innerText = `₹${netSales.toFixed(2)}`;
   document.getElementById('prof-cogs').innerText = `₹${totalCOGS.toFixed(2)}`;
-  
+
   const grossElem = document.getElementById('prof-gross');
   grossElem.innerText = `₹${grossProfit.toFixed(2)}`;
   grossElem.className = grossProfit >= 0 ? 'text-green' : 'text-red';
@@ -1626,8 +1742,15 @@ function renderStockSummaryTable(filter = '') {
 
 /* -------------------- DAILY TRENDS -------------------- */
 
+function clearDateFilter() {
+  document.getElementById('daily-date-filter').value = '';
+  renderDailyTrends();
+}
+
 function renderDailyTrends() {
-  const dateFilter = document.getElementById('daily-date-filter').value;
+  const dateFilterInput = document.getElementById('daily-date-filter').value;
+  const dateFilter = dateFilterInput ? formatDateISO(parseDateInput(dateFilterInput)) : '';
+  
   const tbody = document.getElementById('daily-trends-table-body');
   const { logCOGSMap } = calculateInventoryAndCOGS();
 
@@ -1664,7 +1787,7 @@ function renderDailyTrends() {
     const margin = data.sales > 0 ? (profit / data.sales) * 100 : 0;
 
     return `<tr>
-      <td><b>${d}</b></td>
+      <td><b>${formatDateDDMMYYYY(new Date(d))}</b></td>
       <td class="text-green">₹${data.sales.toFixed(2)}</td>
       <td class="text-red">₹${data.purchases.toFixed(2)}</td>
       <td class="${profit >= 0 ? 'text-green' : 'text-red'}"><b>₹${profit.toFixed(2)}</b></td>
@@ -1695,7 +1818,7 @@ function renderCashFlow() {
 
   document.getElementById('cf-in').innerText = `₹${cashIn.toFixed(2)}`;
   document.getElementById('cf-out').innerText = `₹${cashOut.toFixed(2)}`;
-  
+
   const net = cashIn - cashOut;
   const netElem = document.getElementById('cf-net');
   netElem.innerText = `₹${net.toFixed(2)}`;
