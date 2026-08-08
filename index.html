@@ -609,46 +609,44 @@
     let allPartiesList = [];
 
     // Landed cost calculator with proportional freight allocation
-    function getItemPurchaseCost(itemName) {
+    // Returns the latest known landed purchase cost. Historical sales store their own costSnapshot.
+    function getItemPurchaseCost(itemName, asOfDate = null) {
       if (!itemName) return 0;
-      let cleanName = itemName.trim().toLowerCase();
+      const cleanName = itemName.trim().toLowerCase();
+      const cutoff = asOfDate ? new Date(asOfDate).getTime() : Infinity;
 
-      for (let i = allLogs.length - 1; i >= 0; i--) {
-        let log = allLogs[i];
-        if (log.type === 'PURCHASE' && log.items && log.items.length > 0) {
-          let matchedItem = log.items.find(it => it.name && it.name.trim().toLowerCase() === cleanName);
-          if (matchedItem) {
-            let baseCost = parseFloat(matchedItem.cost || matchedItem.rate || 0);
-            let qty = parseInt(matchedItem.qty) || 1;
-            let misc = parseFloat(log.miscCharges || 0);
-            
-            let freightPerUnit = 0;
-            if (misc > 0) {
-              let itemsSubtotal = log.items.reduce((acc, current) => {
-                let c = parseFloat(current.cost || current.rate || 0);
-                let q = parseInt(current.qty) || 1;
-                return acc + (c * q);
-              }, 0);
+      const purchases = allLogs
+        .filter(log => (log.type === 'PURCHASE' || log.type === 'PURCHASE_RETURN') && log.items)
+        .filter(log => new Date(log.date || 0).getTime() <= cutoff)
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-              if (itemsSubtotal > 0) {
-                let itemTotal = baseCost * qty;
-                let allocatedFreight = (itemTotal / itemsSubtotal) * misc;
-                freightPerUnit = allocatedFreight / qty;
-              }
-            }
+      for (const log of purchases) {
+        const matched = (log.items || []).find(it => it.name && it.name.trim().toLowerCase() === cleanName);
+        if (!matched) continue;
 
-            let effectiveCost = baseCost + freightPerUnit;
-            if (effectiveCost > 0) return effectiveCost;
-          }
+        const baseCost = parseFloat(matched.cost ?? matched.rate) || 0;
+        const qty = Math.max(1, parseInt(matched.qty) || 1);
+        const misc = log.type === 'PURCHASE' ? (parseFloat(log.miscCharges) || 0) : 0;
+        let freightPerUnit = 0;
+
+        if (misc > 0) {
+          const subtotal = (log.items || []).reduce((sum, current) => {
+            const c = parseFloat(current.cost ?? current.rate) || 0;
+            const q = Math.max(1, parseInt(current.qty) || 1);
+            return sum + c * q;
+          }, 0);
+          if (subtotal > 0) freightPerUnit = ((baseCost * qty) / subtotal * misc) / qty;
         }
+
+        const discount = log.type === 'PURCHASE' ? (parseFloat(log.discount) || 0) : 0;
+        const totalQty = (log.items || []).reduce((sum, current) => sum + Math.max(1, parseInt(current.qty) || 1), 0);
+        const discountPerUnit = totalQty > 0 ? discount / totalQty : 0;
+        const effectiveCost = Math.max(0, baseCost + freightPerUnit - discountPerUnit);
+        if (effectiveCost > 0) return effectiveCost;
       }
 
-      let catalogItem = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
-      if (catalogItem && catalogItem.purchaseRate !== undefined && catalogItem.purchaseRate !== null && parseFloat(catalogItem.purchaseRate) > 0) {
-        return parseFloat(catalogItem.purchaseRate);
-      }
-
-      return 0;
+      const catalogItem = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
+      return catalogItem && parseFloat(catalogItem.purchaseRate) > 0 ? parseFloat(catalogItem.purchaseRate) : 0;
     }
 
     // Realtime Database Listeners
@@ -772,21 +770,20 @@
     }
 
     function calculateStockForItem(itemName) {
-      let item = allItems.find(i => i.name.toLowerCase() === itemName.toLowerCase());
-      let opening = item ? (item.openingStock || 0) : 0;
+      const cleanName = (itemName || '').trim().toLowerCase();
+      const item = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
+      const opening = item ? (parseInt(item.openingStock) || 0) : 0;
       let totalPurchased = 0;
       let totalSold = 0;
 
       allLogs.forEach(log => {
-        let itemsList = log.items || [{ name: log.item, qty: log.qty }];
-        itemsList.forEach(i => {
-          if(i.name && i.name.toLowerCase() === itemName.toLowerCase()) {
-            let q = parseInt(i.qty) || 0;
-            if(log.type === 'PURCHASE') totalPurchased += q;
-            if(log.type === 'PURCHASE_RETURN') totalPurchased -= q;
-            if(log.type === 'SALE') totalSold += q;
-            if(log.type === 'SALE_RETURN') totalSold -= q;
-          }
+        (log.items || []).forEach(i => {
+          if (!i.name || i.name.trim().toLowerCase() !== cleanName) return;
+          const q = Math.max(0, parseInt(i.qty) || 0);
+          if (log.type === 'PURCHASE') totalPurchased += q;
+          else if (log.type === 'PURCHASE_RETURN') totalPurchased -= q;
+          else if (log.type === 'SALE') totalSold += q;
+          else if (log.type === 'SALE_RETURN') totalSold -= q;
         });
       });
 
@@ -820,24 +817,38 @@
     }
 
     function addItemToSaleCart() {
-      let name = document.getElementById('s-item').value;
-      let qty = parseInt(document.getElementById('s-qty').value) || 0;
-      let rate = parseFloat(document.getElementById('s-rate').value) || 0;
+      const name = document.getElementById('s-item').value;
+      const qty = parseInt(document.getElementById('s-qty').value) || 0;
+      const rate = parseFloat(document.getElementById('s-rate').value) || 0;
+      const isReturn = document.getElementById('s-is-return').checked;
 
-      if(!name || qty <= 0) {
-        alert('Please select an item and enter valid quantity.');
+      if (!name || qty <= 0 || rate < 0) {
+        alert('Please select an item and enter valid quantity/rate.');
         return;
       }
 
-      let existing = saleCart.find(i => i.name === name);
-      if(existing) {
+      if (!isReturn) {
+        const currentStock = calculateStockForItem(name).closing;
+        const alreadyInCart = saleCart.filter(i => i.name.toLowerCase() === name.toLowerCase())
+          .reduce((sum, i) => sum + (parseInt(i.qty) || 0), 0);
+        if (qty + alreadyInCart > currentStock) {
+          alert(`Insufficient stock. Available stock: ${currentStock}`);
+          return;
+        }
+      }
+
+      const costSnapshot = getItemPurchaseCost(name);
+      const existing = saleCart.find(i => i.name === name);
+      if (existing) {
         existing.qty += qty;
         existing.rate = rate;
+        if (!existing.costSnapshot) existing.costSnapshot = costSnapshot;
       } else {
-        saleCart.push({ name, qty, rate });
+        saleCart.push({ name, qty, rate, costSnapshot });
       }
 
       renderSaleCart();
+      document.getElementById('s-qty').value = '1';
     }
 
     function renderSaleCart() {
@@ -870,39 +881,33 @@
     }
 
     function submitFinalSale() {
-      if(saleCart.length === 0) {
-        alert('Cart is empty!');
-        return;
-      }
+      if (saleCart.length === 0) { alert('Cart is empty!'); return; }
 
-      let selectVal = document.getElementById('s-customer-select').value;
-      let partyName = '';
-
-      if(selectVal === '__NEW__') {
-        partyName = document.getElementById('s-customer-new').value;
-      } else {
-        partyName = selectVal;
-      }
-
+      const selectVal = document.getElementById('s-customer-select').value;
+      let partyName = selectVal === '__NEW__' ? document.getElementById('s-customer-new').value : selectVal;
       partyName = validatePartyName(partyName);
-      if(!partyName) {
-        alert('Please specify a valid customer name.');
+      if (!partyName) { alert('Please specify a valid customer name.'); return; }
+
+      const isReturn = document.getElementById('s-is-return').checked;
+      const paid = Math.max(0, parseFloat(document.getElementById('s-paid').value) || 0);
+      const discount = Math.max(0, parseFloat(document.getElementById('s-discount').value) || 0);
+      const grossTotal = saleCart.reduce((acc, item) => acc + ((parseInt(item.qty) || 0) * (parseFloat(item.rate) || 0)), 0);
+      const netTotal = Math.max(0, grossTotal - discount);
+
+      if (paid > netTotal) {
+        alert(`Paid/refunded amount cannot exceed ₹${netTotal.toFixed(2)}.`);
         return;
       }
 
-      let isReturn = document.getElementById('s-is-return').checked;
-      let paid = parseFloat(document.getElementById('s-paid').value) || 0;
-      let discount = parseFloat(document.getElementById('s-discount').value) || 0;
-      let grandTotal = saleCart.reduce((acc, item) => acc + (item.qty * item.rate), 0);
-
-      let logEntry = {
+      const logEntry = {
         date: new Date().toISOString(),
         type: isReturn ? 'SALE_RETURN' : 'SALE',
         party: partyName,
-        items: saleCart,
-        grandTotal: grandTotal,
+        items: saleCart.map(i => ({ ...i, costSnapshot: parseFloat(i.costSnapshot) || 0 })),
+        grossTotal,
+        grandTotal: netTotal,
         paidAmount: paid,
-        discount: discount
+        discount
       };
 
       rtdb.ref('logs').push(logEntry).then(() => {
@@ -914,7 +919,7 @@
         document.getElementById('s-customer-new').value = '';
         document.getElementById('s-is-return').checked = false;
         togglePartyInput('s-customer-select', 's-customer-new-wrap');
-      });
+      }).catch(err => alert('Unable to save sale: ' + err.message));
     }
 
     function addItemToPurchaseCart() {
@@ -976,61 +981,61 @@
     }
 
     function submitFinalPurchase() {
-      if(purchaseCart.length === 0) {
-        alert('Purchase cart is empty!');
-        return;
-      }
+      if (purchaseCart.length === 0) { alert('Purchase cart is empty!'); return; }
 
-      let selectVal = document.getElementById('p-supplier-select').value;
+      const selectVal = document.getElementById('p-supplier-select').value;
       let supplierName = selectVal === '__NEW__' ? document.getElementById('p-supplier-new').value : selectVal;
-
       supplierName = validatePartyName(supplierName);
-      if(!supplierName) {
-        alert('Please specify a valid supplier name.');
+      if (!supplierName) { alert('Please specify a valid supplier name.'); return; }
+
+      const invNum = document.getElementById('p-inv-num').value.trim() || 'N/A';
+      const isReturn = document.getElementById('p-is-return').checked;
+      const paid = Math.max(0, parseFloat(document.getElementById('p-paid').value) || 0);
+      const discount = Math.max(0, parseFloat(document.getElementById('p-discount').value) || 0);
+      const misc = Math.max(0, parseFloat(document.getElementById('p-misc').value) || 0);
+      const subTotal = purchaseCart.reduce((acc, item) => acc + ((parseInt(item.qty) || 0) * (parseFloat(item.cost) || 0)), 0);
+      const grossTotal = subTotal + misc;
+      const netTotal = Math.max(0, grossTotal - discount);
+
+      if (paid > netTotal) {
+        alert(`Paid/refund amount cannot exceed ₹${netTotal.toFixed(2)}.`);
         return;
       }
 
-      let invNum = document.getElementById('p-inv-num').value.trim() || 'N/A';
-      let isReturn = document.getElementById('p-is-return').checked;
-      let paid = parseFloat(document.getElementById('p-paid').value) || 0;
-      let discount = parseFloat(document.getElementById('p-discount').value) || 0;
-      let misc = parseFloat(document.getElementById('p-misc').value) || 0;
-      let subTotal = purchaseCart.reduce((acc, item) => acc + (item.qty * item.cost), 0);
-      let grandTotal = subTotal + misc;
-
-      // Ensure Items exist in Catalog Database
+      const itemWrites = [];
       purchaseCart.forEach(item => {
-        let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
-        if(existing) {
-          rtdb.ref('items/' + existing.key).update({
+        const existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+        if (existing) {
+          itemWrites.push(rtdb.ref('items/' + existing.key).update({
             purchaseRate: item.cost,
             sellingPrice: item.sell,
             category: item.category
-          });
+          }));
         } else {
-          rtdb.ref('items').push({
+          itemWrites.push(rtdb.ref('items').push({
             name: item.name,
             category: item.category,
-            openingStock: item.opening,
+            openingStock: item.opening || 0,
             purchaseRate: item.cost,
             sellingPrice: item.sell
-          });
+          }));
         }
       });
 
-      let logEntry = {
+      const logEntry = {
         date: new Date().toISOString(),
         type: isReturn ? 'PURCHASE_RETURN' : 'PURCHASE',
         invoiceNum: invNum,
         party: supplierName,
-        items: purchaseCart,
-        grandTotal: grandTotal,
+        items: purchaseCart.map(i => ({ ...i })),
+        grossTotal,
+        grandTotal: netTotal,
         miscCharges: misc,
         paidAmount: paid,
-        discount: discount
+        discount
       };
 
-      rtdb.ref('logs').push(logEntry).then(() => {
+      Promise.all(itemWrites).then(() => rtdb.ref('logs').push(logEntry)).then(() => {
         alert('Purchase Transaction Saved!');
         purchaseCart = [];
         renderPurchaseCart();
@@ -1041,7 +1046,7 @@
         document.getElementById('p-supplier-new').value = '';
         document.getElementById('p-is-return').checked = false;
         togglePartyInput('p-supplier-select', 'p-supplier-new-wrap');
-      });
+      }).catch(err => alert('Unable to save purchase: ' + err.message));
     }
 
     function renderItemDirectory(query) {
@@ -1086,72 +1091,41 @@
 
     // Calculating Party Ledgers using the specified simplified formulas
     function calculatePartyMetrics(partyName, partyType) {
-      let totSales = 0;
-      let totPurchases = 0;
-      let totSReturn = 0;
-      let totPReturn = 0;
-      let totDiscAllowed = 0;
-      let totDiscReceived = 0;
-      let totPaymentsRec = 0;
-      let totPaymentsPaid = 0;
-
-      let cleanParty = partyName.trim().toLowerCase();
+      const cleanParty = partyName.trim().toLowerCase();
+      let totSales = 0, totPurchases = 0, totSReturn = 0, totPReturn = 0;
+      let totDiscAllowed = 0, totDiscReceived = 0, totPaymentsRec = 0, totPaymentsPaid = 0;
 
       allLogs.forEach(l => {
-        if(l.party && l.party.trim().toLowerCase() === cleanParty) {
-          let amt = parseFloat(l.grandTotal) || 0;
-          let paid = parseFloat(l.paidAmount) || 0;
-          let disc = parseFloat(l.discount) || 0;
+        if (!l.party || l.party.trim().toLowerCase() !== cleanParty) return;
+        const amt = parseFloat(l.grandTotal) || 0;
+        const paid = parseFloat(l.paidAmount) || 0;
+        const disc = parseFloat(l.discount) || 0;
 
-          if(l.type === 'SALE') {
-            totSales += amt;
-            totPaymentsRec += paid;
-            totDiscAllowed += disc;
-          } else if(l.type === 'SALE_RETURN') {
-            totSReturn += amt;
-            totPaymentsPaid += paid; // Cash refunded to customer
-          } else if(l.type === 'PURCHASE') {
-            totPurchases += amt;
-            totPaymentsPaid += paid;
-            totDiscReceived += disc;
-          } else if(l.type === 'PURCHASE_RETURN') {
-            totPReturn += amt;
-            totPaymentsRec += paid; // Cash received back from supplier
-          }
+        if (partyType === 'Customer') {
+          if (l.type === 'SALE') { totSales += amt; totPaymentsRec += paid; totDiscAllowed += disc; }
+          else if (l.type === 'SALE_RETURN') { totSReturn += amt; totPaymentsPaid += paid; }
+        } else {
+          if (l.type === 'PURCHASE') { totPurchases += amt; totPaymentsPaid += paid; totDiscReceived += disc; }
+          else if (l.type === 'PURCHASE_RETURN') { totPReturn += amt; totPaymentsRec += paid; }
         }
       });
 
       allPayments.forEach(p => {
-        if(p.party && p.party.trim().toLowerCase() === cleanParty) {
-          let amt = parseFloat(p.amount) || 0;
-          if(p.direction === 'RECEIVED') {
-            totPaymentsRec += amt;
-          } else if(p.direction === 'PAID') {
-            totPaymentsPaid += amt;
-          }
-        }
+        if (!p.party || p.party.trim().toLowerCase() !== cleanParty) return;
+        if (p.partyType && p.partyType !== partyType) return;
+        const amt = parseFloat(p.amount) || 0;
+        if (p.direction === 'RECEIVED') totPaymentsRec += amt;
+        else if (p.direction === 'PAID') totPaymentsPaid += amt;
       });
 
-      let netBalance = 0;
+      let netBalance;
       if (partyType === 'Customer') {
-        // Customer Formula: Sales - Payments Received - Sales Return - Discount Allowed - Purchases Made
-        netBalance = totSales - totPaymentsRec - totSReturn - totDiscAllowed - totPurchases;
+        netBalance = totSales - totSReturn - totDiscAllowed - totPaymentsRec + totPaymentsPaid;
       } else {
-        // Vendor Formula: Purchases - Payments Made - Purchase Return - Sales Made - Discount Received
-        netBalance = totPurchases - totPaymentsPaid - totPReturn - totSales - totDiscReceived;
+        netBalance = totPurchases - totPReturn - totDiscReceived - totPaymentsPaid + totPaymentsRec;
       }
 
-      return {
-        totSales,
-        totPurchases,
-        totSReturn,
-        totPReturn,
-        totDiscAllowed,
-        totDiscReceived,
-        totPaymentsRec,
-        totPaymentsPaid,
-        netBalance
-      };
+      return { totSales, totPurchases, totSReturn, totPReturn, totDiscAllowed, totDiscReceived, totPaymentsRec, totPaymentsPaid, netBalance };
     }
 
     function renderPartyStatement() {
@@ -1287,7 +1261,7 @@
       rtdb.ref('payments').push(paymentObj).then(() => {
         alert('Payment Recorded!');
         document.getElementById('party-adjust-amount').value = '';
-      });
+      }).catch(err => alert('Unable to record payment: ' + err.message));
     }
 
     function renderHistoryTable() {
@@ -1336,7 +1310,8 @@
 
       let box = document.getElementById('modal-summary-box');
       box.innerHTML = `
-        <div>Grand Total: <b>₹${(parseFloat(log.grandTotal)||0).toFixed(2)}</b></div>
+        <div>Gross Total: <b>₹${(parseFloat(log.grossTotal ?? log.grandTotal)||0).toFixed(2)}</b></div>
+        <div>Net Total: <b>₹${(parseFloat(log.grandTotal)||0).toFixed(2)}</b></div>
         <div>Discount: <b>₹${(parseFloat(log.discount)||0).toFixed(2)}</b></div>
         <div>Paid Amount: <b>₹${(parseFloat(log.paidAmount)||0).toFixed(2)}</b></div>
         <div style="color:#dc2626; font-weight:bold;">Due Balance: ₹${((parseFloat(log.grandTotal)||0) - (parseFloat(log.paidAmount)||0) - (parseFloat(log.discount)||0)).toFixed(2)}</div>
@@ -1366,7 +1341,7 @@
           (l.items || []).forEach(it => {
             let q = parseInt(it.qty) || 0;
             let r = parseFloat(it.rate) || 0;
-            let itemCost = getItemPurchaseCost(it.name);
+            let itemCost = parseFloat(it.costSnapshot) || getItemPurchaseCost(it.name, l.date);
             let lineCogs = q * itemCost;
             let lineSales = q * r;
 
@@ -1480,7 +1455,7 @@
         if(log.type === 'SALE' || log.type === 'SALE_RETURN') {
           (log.items || []).forEach(it => {
             let q = parseInt(it.qty) || 0;
-            let c = getItemPurchaseCost(it.name);
+            let c = parseFloat(it.costSnapshot) || getItemPurchaseCost(it.name, log.date);
             let costVal = q * c;
             if(log.type === 'SALE_RETURN') costVal = -costVal;
             daysMap[d].cogs += costVal;
@@ -1559,13 +1534,13 @@
       let salesMap = {};
 
       allLogs.forEach(l => {
-        if(l.type === 'SALE') {
-          (l.items || []).forEach(i => {
-            if(!salesMap[i.name]) salesMap[i.name] = { qty: 0, val: 0 };
-            salesMap[i.name].qty += (parseInt(i.qty) || 0);
-            salesMap[i.name].val += ((parseInt(i.qty) || 0) * (parseFloat(i.rate) || 0));
-          });
-        }
+        if(l.type !== 'SALE' && l.type !== 'SALE_RETURN') return;
+        (l.items || []).forEach(i => {
+          if(!salesMap[i.name]) salesMap[i.name] = { qty: 0, val: 0 };
+          const sign = l.type === 'SALE_RETURN' ? -1 : 1;
+          salesMap[i.name].qty += sign * (parseInt(i.qty) || 0);
+          salesMap[i.name].val += sign * ((parseInt(i.qty) || 0) * (parseFloat(i.rate) || 0));
+        });
       });
 
       let sortedSales = Object.keys(salesMap).map(k => ({ name: k, ...salesMap[k] })).sort((a,b) => b.qty - a.qty).slice(0, 5);
@@ -1666,49 +1641,38 @@
     }
 
     function saveEditedInvoice() {
-      let logId = document.getElementById('edit-log-id').value;
-      let log = allLogs.find(l => l.id === logId);
-      if(!log) return;
+      const logId = document.getElementById('edit-log-id').value;
+      const log = allLogs.find(l => l.id === logId);
+      if (!log) return;
 
-      let party = document.getElementById('edit-party').value.trim();
-      let paid = parseFloat(document.getElementById('edit-paid').value) || 0;
-      let discount = parseFloat(document.getElementById('edit-discount').value) || 0;
-      let misc = parseFloat(document.getElementById('edit-misc').value) || 0;
+      const party = validatePartyName(document.getElementById('edit-party').value.trim());
+      const paid = Math.max(0, parseFloat(document.getElementById('edit-paid').value) || 0);
+      const discount = Math.max(0, parseFloat(document.getElementById('edit-discount').value) || 0);
+      const misc = log.type.includes('PURCHASE') ? Math.max(0, parseFloat(document.getElementById('edit-misc').value) || 0) : 0;
+      if (!party) { alert('Please specify a valid party name.'); return; }
 
-      party = validatePartyName(party);
-      if(!party) {
-        alert('Please specify a valid party name.');
-        return;
-      }
-
-      let items = (log.items || []).map((it, idx) => {
-        let q = parseInt(document.getElementById(`edit-item-qty-${idx}`).value) || 1;
-        let r = parseFloat(document.getElementById(`edit-item-rate-${idx}`).value) || 0;
-        return {
-          ...it,
-          qty: q,
-          rate: log.type.includes('SALE') ? r : it.rate,
-          cost: log.type.includes('PURCHASE') ? r : it.cost
-        };
+      const items = (log.items || []).map((it, idx) => {
+        const q = parseInt(document.getElementById(`edit-item-qty-${idx}`).value) || 0;
+        const r = parseFloat(document.getElementById(`edit-item-rate-${idx}`).value) || 0;
+        if (q <= 0) throw new Error('Quantity must be greater than zero.');
+        if (log.type.includes('SALE')) {
+          return { ...it, qty: q, rate: r, costSnapshot: parseFloat(it.costSnapshot) || getItemPurchaseCost(it.name, log.date) };
+        }
+        return { ...it, qty: q, cost: r };
       });
 
-      let grandTotal = items.reduce((acc, i) => acc + (i.qty * (i.rate || i.cost)), 0);
-      if(log.type.includes('PURCHASE')) grandTotal += misc;
+      const itemTotal = items.reduce((acc, i) => acc + (i.qty * (parseFloat(i.rate ?? i.cost) || 0)), 0);
+      const grossTotal = itemTotal + misc;
+      const grandTotal = Math.max(0, grossTotal - discount);
+      if (paid > grandTotal) { alert(`Paid amount cannot exceed ₹${grandTotal.toFixed(2)}.`); return; }
 
-      let updateData = {
-        party: party,
-        paidAmount: paid,
-        discount: discount,
-        grandTotal: grandTotal,
-        items: items
-      };
-
-      if(log.type.includes('PURCHASE')) updateData.miscCharges = misc;
+      const updateData = { party, paidAmount: paid, discount, grossTotal, grandTotal, items };
+      if (log.type.includes('PURCHASE')) updateData.miscCharges = misc;
 
       rtdb.ref('logs/' + logId).update(updateData).then(() => {
         alert('Entry updated successfully!');
         closeEditModal();
-      });
+      }).catch(err => alert('Unable to update entry: ' + err.message));
     }
 
     function openEditPaymentModal(payId) {
@@ -1743,13 +1707,13 @@
       }).then(() => {
         alert('Payment entry updated!');
         closeEditPaymentModal();
-      });
+      }).catch(err => alert('Unable to update payment: ' + err.message));
     }
 
     function deleteEntry(id, isLog) {
       if(confirm('Are you sure you want to delete this record?')) {
         let path = isLog ? 'logs/' + id : 'payments/' + id;
-        rtdb.ref(path).remove();
+        rtdb.ref(path).remove().catch(err => alert('Unable to delete record: ' + err.message));
       }
     }
   </script>
