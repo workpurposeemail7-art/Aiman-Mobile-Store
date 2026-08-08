@@ -608,45 +608,115 @@
     let suppliersList = [];
     let allPartiesList = [];
 
+    // Normalize both the current multi-line-item format and older single-item records.
+    function getLogItems(log) {
+      if (Array.isArray(log.items) && log.items.length) return log.items;
+      if (log.item) {
+        return [{
+          name: log.item,
+          qty: parseInt(log.qty) || 0,
+          rate: parseFloat(log.rate) || 0,
+          cost: parseFloat(log.cost) || 0,
+          costSnapshot: parseFloat(log.costSnapshot) || 0,
+          category: log.category || 'General'
+        }];
+      }
+      return [];
+    }
+
+    function money(v) { return parseFloat(v) || 0; }
+
+    function getLogAmount(log) {
+      if (log && log.grandTotal !== undefined && log.grandTotal !== null) return money(log.grandTotal);
+      if (log && log.total !== undefined && log.total !== null) return money(log.total);
+      if (log && log.amount !== undefined && log.amount !== null) return money(log.amount);
+      const items = getLogItems(log || {});
+      let total = items.reduce((sum, i) => sum + qty(i.qty) * money(i.rate ?? i.cost), 0);
+      if (log && log.type === 'PURCHASE') total += money(log.miscCharges);
+      return Math.max(0, total - money(log && log.discount));
+    }
+
+    function getLogPaid(log) {
+      return money(log && (log.paidAmount ?? log.paid ?? log.payment));
+    }
+    function qty(v) { return Math.max(0, parseFloat(v) || 0); }
+    function sameItem(a,b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
+
+    // Purchase invoice landed cost for one line. Freight/misc is allocated
+    // proportionately by that line's purchase value; invoice discount is then
+    // allocated proportionately across all item value.
+    function getPurchaseLineLandedCost(log, item) {
+      const base = money(item.cost ?? item.rate);
+      const q = Math.max(1, qty(item.qty));
+      if (log.type !== 'PURCHASE') return base;
+
+      const items = getLogItems(log);
+      const subtotal = items.reduce((sum, x) => sum + money(x.cost ?? x.rate) * Math.max(1, qty(x.qty)), 0);
+      const misc = money(log.miscCharges);
+      const discount = money(log.discount);
+      const lineValue = base * q;
+      const freight = subtotal > 0 ? (lineValue / subtotal) * misc : 0;
+      const discountShare = subtotal > 0 ? (lineValue / subtotal) * discount : 0;
+      return Math.max(0, (lineValue + freight - discountShare) / q);
+    }
+
+    // Weighted Average Cost at a point in time. Opening stock uses the item's
+    // current catalogue purchase rate as its opening valuation when no better
+    // opening cost is available. Purchases are added at landed cost. Returns
+    // reduce stock at the WAC prevailing immediately before the return.
+    function calculateWAC(itemName, asOfDate = null) {
+      const clean = String(itemName || '').trim().toLowerCase();
+      if (!clean) return 0;
+      const cutoff = asOfDate ? new Date(asOfDate).getTime() : Infinity;
+      const item = allItems.find(i => sameItem(i.name, itemName));
+      let stockQty = item ? qty(item.openingStock) : 0;
+      let stockValue = stockQty * (item ? money(item.purchaseRate) : 0);
+
+      const logs = allLogs.slice().sort((a,b) => new Date(a.date || 0) - new Date(b.date || 0));
+      for (const log of logs) {
+        const t = new Date(log.date || 0).getTime();
+        if (t > cutoff) break;
+        for (const it of getLogItems(log)) {
+          if (!sameItem(it.name, clean)) continue;
+          const qv = qty(it.qty);
+          if (qv <= 0) continue;
+
+          if (log.type === 'PURCHASE') {
+            const landed = getPurchaseLineLandedCost(log, it);
+            stockValue += qv * landed;
+            stockQty += qv;
+          } else if (log.type === 'PURCHASE_RETURN') {
+            const currentWac = stockQty > 0 ? stockValue / stockQty : 0;
+            const removeQty = Math.min(qv, stockQty);
+            stockValue -= removeQty * currentWac;
+            stockQty -= removeQty;
+          } else if (log.type === 'SALE') {
+            // Sale consumes quantity but does not change WAC.
+            const removeQty = Math.min(qv, stockQty);
+            const currentWac = stockQty > 0 ? stockValue / stockQty : 0;
+            stockValue -= removeQty * currentWac;
+            stockQty -= removeQty;
+          } else if (log.type === 'SALE_RETURN') {
+            const returnCost = money(it.costSnapshot) || (stockQty > 0 ? stockValue / stockQty : 0);
+            stockValue += qv * returnCost;
+            stockQty += qv;
+          }
+          if (stockValue < 0 && stockValue > -0.01) stockValue = 0;
+        }
+      }
+      return stockQty > 0 ? Math.max(0, stockValue / stockQty) : 0;
+    }
+
+    function getHistoricalItemCost(log, item) {
+      const snapshot = money(item.costSnapshot);
+      if (snapshot > 0) return snapshot;
+      return calculateWAC(item.name, log.date);
+    }
+
     // Landed cost calculator with proportional freight allocation
     // Returns the latest known landed purchase cost. Historical sales store their own costSnapshot.
     function getItemPurchaseCost(itemName, asOfDate = null) {
-      if (!itemName) return 0;
-      const cleanName = itemName.trim().toLowerCase();
-      const cutoff = asOfDate ? new Date(asOfDate).getTime() : Infinity;
-
-      const purchases = allLogs
-        .filter(log => (log.type === 'PURCHASE' || log.type === 'PURCHASE_RETURN') && log.items)
-        .filter(log => new Date(log.date || 0).getTime() <= cutoff)
-        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-
-      for (const log of purchases) {
-        const matched = (log.items || []).find(it => it.name && it.name.trim().toLowerCase() === cleanName);
-        if (!matched) continue;
-
-        const baseCost = parseFloat(matched.cost ?? matched.rate) || 0;
-        const qty = Math.max(1, parseInt(matched.qty) || 1);
-        const misc = log.type === 'PURCHASE' ? (parseFloat(log.miscCharges) || 0) : 0;
-        let freightPerUnit = 0;
-
-        if (misc > 0) {
-          const subtotal = (log.items || []).reduce((sum, current) => {
-            const c = parseFloat(current.cost ?? current.rate) || 0;
-            const q = Math.max(1, parseInt(current.qty) || 1);
-            return sum + c * q;
-          }, 0);
-          if (subtotal > 0) freightPerUnit = ((baseCost * qty) / subtotal * misc) / qty;
-        }
-
-        const discount = log.type === 'PURCHASE' ? (parseFloat(log.discount) || 0) : 0;
-        const totalQty = (log.items || []).reduce((sum, current) => sum + Math.max(1, parseInt(current.qty) || 1), 0);
-        const discountPerUnit = totalQty > 0 ? discount / totalQty : 0;
-        const effectiveCost = Math.max(0, baseCost + freightPerUnit - discountPerUnit);
-        if (effectiveCost > 0) return effectiveCost;
-      }
-
-      const catalogItem = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
-      return catalogItem && parseFloat(catalogItem.purchaseRate) > 0 ? parseFloat(catalogItem.purchaseRate) : 0;
+      return calculateWAC(itemName, asOfDate);
     }
 
     // Realtime Database Listeners
@@ -675,6 +745,7 @@
     rtdb.ref("payments").on("value", snapshot => {
       let data = snapshot.val() || {};
       allPayments = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+      extractAndRenderParties();
       renderPartyStatement();
       renderCashFlow();
       renderDuesSummary();
@@ -770,29 +841,22 @@
     }
 
     function calculateStockForItem(itemName) {
-      const cleanName = (itemName || '').trim().toLowerCase();
-      const item = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
-      const opening = item ? (parseInt(item.openingStock) || 0) : 0;
-      let totalPurchased = 0;
-      let totalSold = 0;
+      const cleanName = String(itemName || '').trim().toLowerCase();
+      const item = allItems.find(i => sameItem(i.name, cleanName));
+      const opening = item ? qty(item.openingStock) : 0;
+      let purchased = 0, sold = 0;
 
       allLogs.forEach(log => {
-        (log.items || []).forEach(i => {
-          if (!i.name || i.name.trim().toLowerCase() !== cleanName) return;
-          const q = Math.max(0, parseInt(i.qty) || 0);
-          if (log.type === 'PURCHASE') totalPurchased += q;
-          else if (log.type === 'PURCHASE_RETURN') totalPurchased -= q;
-          else if (log.type === 'SALE') totalSold += q;
-          else if (log.type === 'SALE_RETURN') totalSold -= q;
+        getLogItems(log).forEach(i => {
+          if (!sameItem(i.name, cleanName)) return;
+          const qv = qty(i.qty);
+          if (log.type === 'PURCHASE') purchased += qv;
+          else if (log.type === 'PURCHASE_RETURN') purchased -= qv;
+          else if (log.type === 'SALE') sold += qv;
+          else if (log.type === 'SALE_RETURN') sold -= qv;
         });
       });
-
-      return {
-        opening,
-        purchased: totalPurchased,
-        sold: totalSold,
-        closing: opening + totalPurchased - totalSold
-      };
+      return { opening, purchased, sold, closing: opening + purchased - sold };
     }
 
     function filterItems(selectId, query) {
@@ -1027,7 +1091,7 @@
         type: isReturn ? 'PURCHASE_RETURN' : 'PURCHASE',
         invoiceNum: invNum,
         party: supplierName,
-        items: purchaseCart.map(i => ({ ...i })),
+        items: purchaseCart.map(i => ({ ...i, landedCost: isReturn ? money(i.cost) : getPurchaseLineLandedCost({type:'PURCHASE', miscCharges:misc, discount, items:purchaseCart}, i) })),
         grossTotal,
         grandTotal: netTotal,
         miscCharges: misc,
@@ -1091,41 +1155,36 @@
 
     // Calculating Party Ledgers using the specified simplified formulas
     function calculatePartyMetrics(partyName, partyType) {
-      const cleanParty = partyName.trim().toLowerCase();
-      let totSales = 0, totPurchases = 0, totSReturn = 0, totPReturn = 0;
-      let totDiscAllowed = 0, totDiscReceived = 0, totPaymentsRec = 0, totPaymentsPaid = 0;
+      let totSales=0, totPurchases=0, totSReturn=0, totPReturn=0;
+      let totDiscAllowed=0, totDiscReceived=0, totPaymentsRec=0, totPaymentsPaid=0;
+      const clean = String(partyName || '').trim().toLowerCase();
 
       allLogs.forEach(l => {
-        if (!l.party || l.party.trim().toLowerCase() !== cleanParty) return;
-        const amt = parseFloat(l.grandTotal) || 0;
-        const paid = parseFloat(l.paidAmount) || 0;
-        const disc = parseFloat(l.discount) || 0;
-
-        if (partyType === 'Customer') {
-          if (l.type === 'SALE') { totSales += amt; totPaymentsRec += paid; totDiscAllowed += disc; }
-          else if (l.type === 'SALE_RETURN') { totSReturn += amt; totPaymentsPaid += paid; }
-        } else {
-          if (l.type === 'PURCHASE') { totPurchases += amt; totPaymentsPaid += paid; totDiscReceived += disc; }
-          else if (l.type === 'PURCHASE_RETURN') { totPReturn += amt; totPaymentsRec += paid; }
-        }
+        if (!l.party || l.party.trim().toLowerCase() !== clean) return;
+        const amt = getLogAmount(l);
+        const paid = getLogPaid(l);
+        const disc = money(l.discount);
+        if (l.type === 'SALE') { totSales += amt; totPaymentsRec += paid; totDiscAllowed += disc; }
+        else if (l.type === 'SALE_RETURN') { totSReturn += amt; totPaymentsPaid += paid; }
+        else if (l.type === 'PURCHASE') { totPurchases += amt; totPaymentsPaid += paid; totDiscReceived += disc; }
+        else if (l.type === 'PURCHASE_RETURN') { totPReturn += amt; totPaymentsRec += paid; }
       });
 
       allPayments.forEach(p => {
-        if (!p.party || p.party.trim().toLowerCase() !== cleanParty) return;
-        if (p.partyType && p.partyType !== partyType) return;
-        const amt = parseFloat(p.amount) || 0;
-        if (p.direction === 'RECEIVED') totPaymentsRec += amt;
-        else if (p.direction === 'PAID') totPaymentsPaid += amt;
+        if (!p.party || p.party.trim().toLowerCase() !== clean) return;
+        if (p.direction === 'RECEIVED') totPaymentsRec += money(p.amount);
+        else if (p.direction === 'PAID') totPaymentsPaid += money(p.amount);
       });
 
+      // grandTotal is already NET of invoice discount, so do not subtract
+      // discount again from the balance.
       let netBalance;
       if (partyType === 'Customer') {
-        netBalance = totSales - totSReturn - totDiscAllowed - totPaymentsRec + totPaymentsPaid;
+        netBalance = totSales - totSReturn - totPaymentsRec + totPaymentsPaid;
       } else {
-        netBalance = totPurchases - totPReturn - totDiscReceived - totPaymentsPaid + totPaymentsRec;
+        netBalance = totPurchases - totPReturn - totPaymentsPaid + totPaymentsRec;
       }
-
-      return { totSales, totPurchases, totSReturn, totPReturn, totDiscAllowed, totDiscReceived, totPaymentsRec, totPaymentsPaid, netBalance };
+      return {totSales,totPurchases,totSReturn,totPReturn,totDiscAllowed,totDiscReceived,totPaymentsRec,totPaymentsPaid,netBalance};
     }
 
     function renderPartyStatement() {
@@ -1199,8 +1258,8 @@
             date: l.date,
             type: l.type,
             desc: l.invoiceNum ? `Inv #${l.invoiceNum}` : 'Direct Transaction',
-            amount: l.grandTotal,
-            paid: l.paidAmount
+            amount: getLogAmount(l),
+            paid: getLogPaid(l)
           });
         }
       });
@@ -1268,13 +1327,13 @@
       let tbody = document.querySelector('#history-table tbody');
       tbody.innerHTML = '';
 
-      allLogs.slice().reverse().forEach(log => {
+      allLogs.slice().sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)).forEach(log => {
         let tr = document.createElement('tr');
         tr.innerHTML = `
           <td><span class="badge ${log.type.includes('SALE') ? 'badge-sale' : 'badge-purchase'}">${log.type}</span></td>
           <td><b>${log.party}</b><br><small style="color:#6b7280">${log.invoiceNum || ''}</small></td>
-          <td>₹${(parseFloat(log.grandTotal)||0).toFixed(2)}</td>
-          <td>₹${(parseFloat(log.paidAmount)||0).toFixed(2)}</td>
+          <td>₹${getLogAmount(log).toFixed(2)}</td>
+          <td>₹${getLogPaid(log).toFixed(2)}</td>
           <td>
             <button class="btn-view" onclick="viewInvoiceModal('${log.id}')">View</button>
             <button class="btn-edit" onclick="openEditModal('${log.id}')">Edit</button>
@@ -1295,7 +1354,7 @@
       let tbody = document.querySelector('#modal-items-table tbody');
       tbody.innerHTML = '';
 
-      (log.items || []).forEach(item => {
+      getLogItems(log).forEach(item => {
         let r = parseFloat(item.rate || item.cost || 0);
         let q = parseInt(item.qty) || 1;
         let tr = document.createElement('tr');
@@ -1311,10 +1370,10 @@
       let box = document.getElementById('modal-summary-box');
       box.innerHTML = `
         <div>Gross Total: <b>₹${(parseFloat(log.grossTotal ?? log.grandTotal)||0).toFixed(2)}</b></div>
-        <div>Net Total: <b>₹${(parseFloat(log.grandTotal)||0).toFixed(2)}</b></div>
+        <div>Net Total: <b>₹${getLogAmount(log).toFixed(2)}</b></div>
         <div>Discount: <b>₹${(parseFloat(log.discount)||0).toFixed(2)}</b></div>
-        <div>Paid Amount: <b>₹${(parseFloat(log.paidAmount)||0).toFixed(2)}</b></div>
-        <div style="color:#dc2626; font-weight:bold;">Due Balance: ₹${((parseFloat(log.grandTotal)||0) - (parseFloat(log.paidAmount)||0) - (parseFloat(log.discount)||0)).toFixed(2)}</div>
+        <div>Paid Amount: <b>₹${getLogPaid(log).toFixed(2)}</b></div>
+        <div style="color:#dc2626; font-weight:bold;">Due Balance: ₹${(getLogAmount(log) - getLogPaid(log)).toFixed(2)}</div>
       `;
 
       document.getElementById('invoice-modal').classList.remove('hidden');
@@ -1331,17 +1390,17 @@
       let categoryProfitMap = {};
 
       allLogs.forEach(l => {
-        let amt = parseFloat(l.grandTotal) || 0;
+        let amt = getLogAmount(l);
         if(l.type === 'SALE') totalSales += amt;
         if(l.type === 'SALE_RETURN') totalSales -= amt;
         if(l.type === 'PURCHASE') totalPurchases += amt;
         if(l.type === 'PURCHASE_RETURN') totalPurchases -= amt;
 
         if(l.type === 'SALE' || l.type === 'SALE_RETURN') {
-          (l.items || []).forEach(it => {
+          getLogItems(l).forEach(it => {
             let q = parseInt(it.qty) || 0;
             let r = parseFloat(it.rate) || 0;
-            let itemCost = parseFloat(it.costSnapshot) || getItemPurchaseCost(it.name, l.date);
+            let itemCost = getHistoricalItemCost(l, it);
             let lineCogs = q * itemCost;
             let lineSales = q * r;
 
@@ -1453,9 +1512,9 @@
         if(log.type === 'PURCHASE_RETURN') daysMap[d].purchases -= amt;
 
         if(log.type === 'SALE' || log.type === 'SALE_RETURN') {
-          (log.items || []).forEach(it => {
+          getLogItems(log).forEach(it => {
             let q = parseInt(it.qty) || 0;
-            let c = parseFloat(it.costSnapshot) || getItemPurchaseCost(it.name, log.date);
+            let c = getHistoricalItemCost(log, it);
             let costVal = q * c;
             if(log.type === 'SALE_RETURN') costVal = -costVal;
             daysMap[d].cogs += costVal;
@@ -1490,7 +1549,7 @@
       let cashOut = 0;
 
       allLogs.forEach(l => {
-        let paid = parseFloat(l.paidAmount) || 0;
+        let paid = getLogPaid(l);
         if(l.type === 'SALE' || l.type === 'PURCHASE_RETURN') cashIn += paid;
         if(l.type === 'PURCHASE' || l.type === 'SALE_RETURN') cashOut += paid;
       });
@@ -1535,7 +1594,7 @@
 
       allLogs.forEach(l => {
         if(l.type !== 'SALE' && l.type !== 'SALE_RETURN') return;
-        (l.items || []).forEach(i => {
+        getLogItems(l).forEach(i => {
           if(!salesMap[i.name]) salesMap[i.name] = { qty: 0, val: 0 };
           const sign = l.type === 'SALE_RETURN' ? -1 : 1;
           salesMap[i.name].qty += sign * (parseInt(i.qty) || 0);
@@ -1608,7 +1667,7 @@
 
       document.getElementById('edit-log-id').value = log.id;
       document.getElementById('edit-party').value = log.party || '';
-      document.getElementById('edit-paid').value = log.paidAmount || 0;
+      document.getElementById('edit-paid').value = getLogPaid(log);
       document.getElementById('edit-discount').value = log.discount || 0;
 
       let miscWrap = document.getElementById('edit-misc-wrap');
@@ -1622,7 +1681,7 @@
       let container = document.getElementById('edit-items-container');
       container.innerHTML = '';
 
-      (log.items || []).forEach((item, idx) => {
+      getLogItems(log).forEach((item, idx) => {
         let div = document.createElement('div');
         div.style.cssText = "display:flex; gap:6px; margin-top:6px; align-items:center;";
         div.innerHTML = `
@@ -1644,30 +1703,30 @@
       const logId = document.getElementById('edit-log-id').value;
       const log = allLogs.find(l => l.id === logId);
       if (!log) return;
-
-      const party = validatePartyName(document.getElementById('edit-party').value.trim());
-      const paid = Math.max(0, parseFloat(document.getElementById('edit-paid').value) || 0);
-      const discount = Math.max(0, parseFloat(document.getElementById('edit-discount').value) || 0);
-      const misc = log.type.includes('PURCHASE') ? Math.max(0, parseFloat(document.getElementById('edit-misc').value) || 0) : 0;
+      let party = validatePartyName(document.getElementById('edit-party').value.trim());
+      const paid = Math.max(0, money(document.getElementById('edit-paid').value));
+      const discount = Math.max(0, money(document.getElementById('edit-discount').value));
+      const misc = Math.max(0, money(document.getElementById('edit-misc').value));
       if (!party) { alert('Please specify a valid party name.'); return; }
 
-      const items = (log.items || []).map((it, idx) => {
-        const q = parseInt(document.getElementById(`edit-item-qty-${idx}`).value) || 0;
-        const r = parseFloat(document.getElementById(`edit-item-rate-${idx}`).value) || 0;
-        if (q <= 0) throw new Error('Quantity must be greater than zero.');
-        if (log.type.includes('SALE')) {
-          return { ...it, qty: q, rate: r, costSnapshot: parseFloat(it.costSnapshot) || getItemPurchaseCost(it.name, log.date) };
+      const isSale = log.type === 'SALE' || log.type === 'SALE_RETURN';
+      const sourceItems = getLogItems(log);
+      const items = sourceItems.map((it, idx) => {
+        const qv = Math.max(1, parseInt(document.getElementById(`edit-item-qty-${idx}`).value) || 1);
+        const rv = Math.max(0, money(document.getElementById(`edit-item-rate-${idx}`).value));
+        if (isSale) {
+          return { ...it, qty: qv, rate: rv, costSnapshot: money(it.costSnapshot) || calculateWAC(it.name, log.date) };
         }
-        return { ...it, qty: q, cost: r };
+        return { ...it, qty: qv, cost: rv, rate: rv };
       });
 
-      const itemTotal = items.reduce((acc, i) => acc + (i.qty * (parseFloat(i.rate ?? i.cost) || 0)), 0);
-      const grossTotal = itemTotal + misc;
-      const grandTotal = Math.max(0, grossTotal - discount);
-      if (paid > grandTotal) { alert(`Paid amount cannot exceed ₹${grandTotal.toFixed(2)}.`); return; }
+      const itemSubtotal = items.reduce((sum,i) => sum + qty(i.qty) * (isSale ? money(i.rate) : money(i.cost)), 0);
+      const grossTotal = isSale ? itemSubtotal : itemSubtotal + misc;
+      const netTotal = Math.max(0, grossTotal - discount);
+      if (paid > netTotal) { alert(`Paid/refund amount cannot exceed ₹${netTotal.toFixed(2)}.`); return; }
 
-      const updateData = { party, paidAmount: paid, discount, grossTotal, grandTotal, items };
-      if (log.type.includes('PURCHASE')) updateData.miscCharges = misc;
+      const updateData = { party, paidAmount: paid, discount, grossTotal, grandTotal: netTotal, items };
+      if (!isSale) updateData.miscCharges = misc;
 
       rtdb.ref('logs/' + logId).update(updateData).then(() => {
         alert('Entry updated successfully!');
