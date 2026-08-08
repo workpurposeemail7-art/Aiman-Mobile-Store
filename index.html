@@ -38,9 +38,9 @@
     .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 15px; }
     .stat-card { background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
     .stat-val { font-size: 1.1rem; font-weight: bold; margin-top: 5px; }
-    .text-green { color: #16a34a; }
-    .text-red { color: #dc2626; }
-    .text-blue { color: #2563eb; }
+    .text-green { color: #16a34a !important; }
+    .text-red { color: #dc2626 !important; }
+    .text-blue { color: #2563eb !important; }
 
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8rem; }
     th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #e5e7eb; }
@@ -52,7 +52,6 @@
     .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .badge-sale { background: #dcfce7; color: #15803d; }
     .badge-purchase { background: #fee2e2; color: #b91c1c; }
-    .badge-payment { background: #e0e7ff; color: #3730a3; }
 
     .checkbox-wrap { display: flex; align-items: center; gap: 8px; margin-top: 10px; background: #fffbe3; padding: 8px; border-radius: 6px; border: 1px solid #fde68a; }
     .checkbox-wrap input { width: auto; }
@@ -60,7 +59,7 @@
     /* Modal Overlay */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
     .modal-card { background: white; width: 90%; max-width: 550px; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 85vh; overflow-y: auto; }
-    .summary-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 6px; margin-top: 10px; }
+    .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -104,8 +103,16 @@
           <input type="text" id="s-customer-new" placeholder="Enter new customer name">
         </div>
 
-        <label>Paid / Refunded Amount (₹)</label>
-        <input type="number" id="s-paid" value="0">
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1;">
+            <label>Paid / Refunded Amount (₹)</label>
+            <input type="number" id="s-paid" value="0">
+          </div>
+          <div style="flex: 1;">
+            <label>Discount Allowed (₹)</label>
+            <input type="number" id="s-discount" value="0">
+          </div>
+        </div>
 
         <hr style="margin-top:12px;">
 
@@ -172,6 +179,13 @@
             <label>Paid / Refund Amount (₹)</label>
             <input type="number" id="p-paid" value="0">
           </div>
+          <div style="flex: 1;">
+            <label>Discount Received (₹)</label>
+            <input type="number" id="p-discount" value="0">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
           <div style="flex: 1;">
             <label>Freight / Misc Charges (₹)</label>
             <input type="number" id="p-misc" value="0" oninput="renderPurchaseCart()">
@@ -249,27 +263,30 @@
         <h3>Party Ledger & Global Payments</h3>
         <label>Select Party Type</label>
         <select id="acc-type" onchange="renderPartyDropdown()">
-          <option value="All">All Parties (Unified Ledger)</option>
-          <option value="Customer">Customers</option>
-          <option value="Vendor">Vendors / Suppliers</option>
+          <option value="Customer">Customer</option>
+          <option value="Vendor">Vendor / Supplier</option>
         </select>
 
         <label>Select Party Name</label>
         <select id="acc-party" onchange="renderPartyStatement()"></select>
 
-        <div class="stat-card" style="margin-top:15px; background: #f0fdf4;">
+        <div class="stat-card" style="margin-top:15px; background: #f8fafc; border: 1px solid #e2e8f0;">
           <div>Net Balance Due</div>
           <div class="stat-val" id="party-balance">₹0.00</div>
           <small id="party-balance-type" style="font-weight:bold; font-size:0.75rem;"></small>
         </div>
 
         <div class="summary-box">
-          <b>Unified Summary for Selected Party:</b>
+          <b id="summary-title">Summary Breakdown:</b>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; font-size: 0.8rem;">
-            <div>Total Sales/Invoices: <b id="party-tot-sales">₹0.00</b></div>
-            <div>Total Purchases/Bills: <b id="party-tot-purchases">₹0.00</b></div>
+            <div>Total Sales: <b id="party-tot-sales">₹0.00</b></div>
+            <div>Total Purchases: <b id="party-tot-purchases">₹0.00</b></div>
+            <div>Sales Returns: <b id="party-tot-s-return">₹0.00</b></div>
+            <div>Purchase Returns: <b id="party-tot-p-return">₹0.00</b></div>
             <div>Payments Received: <b id="party-tot-rec">₹0.00</b></div>
-            <div>Payments Out/Given: <b id="party-tot-paid">₹0.00</b></div>
+            <div>Payments Paid: <b id="party-tot-paid">₹0.00</b></div>
+            <div>Discounts Allowed: <b id="party-tot-disc-allow">₹0.00</b></div>
+            <div>Discounts Received: <b id="party-tot-disc-rec">₹0.00</b></div>
           </div>
         </div>
 
@@ -333,8 +350,11 @@
         </div>
         <hr style="margin: 8px 0; border-top: 1px dashed #86efac;">
         <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: bold;">
-          <span>Gross Profit:</span>
-          <span id="prof-gross" class="text-green">₹0.00</span>
+          <span>Gross Profit Margin:</span>
+          <div>
+            <span id="prof-gross" class="text-green">₹0.00</span>
+            <small id="prof-margin-pct" style="color:#15803d; font-size:0.85rem; margin-left:4px;">(0.00%)</small>
+          </div>
         </div>
       </div>
 
@@ -348,6 +368,7 @@
               <th>Sales (₹)</th>
               <th>COGS (₹)</th>
               <th>Gross Profit (₹)</th>
+              <th>Profit Margin (%)</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -403,6 +424,7 @@
               <th>Sales (₹)</th>
               <th>Purchases (₹)</th>
               <th>Est. Profit (₹)</th>
+              <th>Margin (%)</th>
             </tr>
           </thead>
           <tbody id="daily-trends-table-body"></tbody>
@@ -469,7 +491,7 @@
         <h3>📥 Receivables Summary (Parties Owing You Money)</h3>
         <table>
           <thead>
-            <tr><th>Party Name</th><th>Net Receivable Balance (₹)</th></tr>
+            <tr><th>Party Name</th><th>Type</th><th>Net Balance (₹)</th></tr>
           </thead>
           <tbody id="receivables-table-body"></tbody>
         </table>
@@ -479,7 +501,7 @@
         <h3>📤 Payables Summary (Net Amount You Owe Parties)</h3>
         <table>
           <thead>
-            <tr><th>Party Name</th><th>Net Payable Balance (₹)</th></tr>
+            <tr><th>Party Name</th><th>Type</th><th>Net Balance (₹)</th></tr>
           </thead>
           <tbody id="payables-table-body"></tbody>
         </table>
@@ -516,8 +538,16 @@
       <label>Party Name</label>
       <input type="text" id="edit-party">
 
-      <label>Paid Amount (₹)</label>
-      <input type="number" id="edit-paid">
+      <div style="display: flex; gap: 8px;">
+        <div style="flex: 1;">
+          <label>Paid Amount (₹)</label>
+          <input type="number" id="edit-paid">
+        </div>
+        <div style="flex: 1;">
+          <label>Discount (₹)</label>
+          <input type="number" id="edit-discount" value="0">
+        </div>
+      </div>
 
       <div id="edit-misc-wrap">
         <label>Freight / Misc Charges (₹)</label>
@@ -701,7 +731,7 @@
         }
         if(p.partyType === 'Customer') {
           if(!customersList.some(c => c.toLowerCase() === partyTrimmed.toLowerCase())) customersList.push(partyTrimmed);
-        } else {
+        } else if(p.partyType === 'Vendor') {
           if(!suppliersList.some(s => s.toLowerCase() === partyTrimmed.toLowerCase())) suppliersList.push(partyTrimmed);
         }
       });
@@ -734,7 +764,7 @@
       }
     }
 
-    function validatePartyName(name, existingList) {
+    function validatePartyName(name) {
       let trimmed = name.trim();
       if(!trimmed) return null;
       let existingMatch = allPartiesList.find(item => item.toLowerCase() === trimmed.toLowerCase());
@@ -774,28 +804,39 @@
       select.innerHTML = '<option value="">-- Select Item --</option>';
       let filtered = allItems.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
       filtered.forEach(item => {
-        let stock = calculateStockForItem(item.name);
         let opt = document.createElement('option');
         opt.value = item.name;
-        opt.textContent = `${item.name} (Stock: ${stock.closing})`;
+        opt.textContent = `${item.name} (Stock: ${calculateStockForItem(item.name).closing})`;
         select.appendChild(opt);
       });
     }
 
     function updateSaleRate() {
-      let itemName = document.getElementById('s-item').value;
-      let item = allItems.find(i => i.name === itemName);
-      if(item) document.getElementById('s-rate').value = item.sellingPrice || 0;
+      let selectedName = document.getElementById('s-item').value;
+      let item = allItems.find(i => i.name === selectedName);
+      if(item) {
+        document.getElementById('s-rate').value = item.sellingPrice || 0;
+      }
     }
 
     function addItemToSaleCart() {
       let name = document.getElementById('s-item').value;
-      let qty = parseInt(document.getElementById('s-qty').value);
-      let rate = parseFloat(document.getElementById('s-rate').value);
+      let qty = parseInt(document.getElementById('s-qty').value) || 0;
+      let rate = parseFloat(document.getElementById('s-rate').value) || 0;
 
-      if(!name || qty <= 0) return alert("Select an item and valid quantity.");
+      if(!name || qty <= 0) {
+        alert('Please select an item and enter valid quantity.');
+        return;
+      }
 
-      saleCart.push({ name, qty, rate, total: qty * rate });
+      let existing = saleCart.find(i => i.name === name);
+      if(existing) {
+        existing.qty += qty;
+        existing.rate = rate;
+      } else {
+        saleCart.push({ name, qty, rate });
+      }
+
       renderSaleCart();
     }
 
@@ -803,69 +844,98 @@
       let container = document.getElementById('s-cart-items');
       container.innerHTML = '';
       let grandTotal = 0;
-      saleCart.forEach((item, idx) => {
-        grandTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} @ ₹${item.rate.toFixed(2)} = ₹${item.total.toFixed(2)}</div><button class="btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
+
+      saleCart.forEach((item, index) => {
+        let total = item.qty * item.rate;
+        grandTotal += total;
+
+        let div = document.createElement('div');
+        div.className = 'cart-item';
+        div.innerHTML = `
+          <div>
+            <b>${item.name}</b><br>
+            <small>${item.qty} x ₹${item.rate.toFixed(2)} = ₹${total.toFixed(2)}</small>
+          </div>
+          <button class="btn-danger" onclick="removeSaleCartItem(${index})">X</button>
+        `;
+        container.appendChild(div);
       });
+
       document.getElementById('s-grand-total').textContent = grandTotal.toFixed(2);
     }
 
-    async function submitFinalSale() {
-      if(saleCart.length === 0) return alert("Cart is empty!");
-      
-      let isReturn = document.getElementById('s-is-return').checked;
-      let selectVal = document.getElementById('s-customer-select').value;
-      let customerName = '';
+    function removeSaleCartItem(index) {
+      saleCart.splice(index, 1);
+      renderSaleCart();
+    }
 
-      if(selectVal === '__NEW__') {
-        let rawInput = document.getElementById('s-customer-new').value;
-        customerName = validatePartyName(rawInput, customersList);
-        if(!customerName) return alert("Please enter a valid customer name.");
-      } else if(selectVal) {
-        customerName = selectVal;
-      } else {
-        customerName = 'Cash Customer';
+    function submitFinalSale() {
+      if(saleCart.length === 0) {
+        alert('Cart is empty!');
+        return;
       }
 
+      let selectVal = document.getElementById('s-customer-select').value;
+      let partyName = '';
+
+      if(selectVal === '__NEW__') {
+        partyName = document.getElementById('s-customer-new').value;
+      } else {
+        partyName = selectVal;
+      }
+
+      partyName = validatePartyName(partyName);
+      if(!partyName) {
+        alert('Please specify a valid customer name.');
+        return;
+      }
+
+      let isReturn = document.getElementById('s-is-return').checked;
       let paid = parseFloat(document.getElementById('s-paid').value) || 0;
-      let type = isReturn ? 'SALE_RETURN' : 'SALE';
-      let invNum = (isReturn ? "SRET-" : "SALE-") + Date.now().toString().slice(-6);
-      let totalBill = saleCart.reduce((a, b) => a + b.total, 0);
+      let discount = parseFloat(document.getElementById('s-discount').value) || 0;
+      let grandTotal = saleCart.reduce((acc, item) => acc + (item.qty * item.rate), 0);
 
-      await rtdb.ref("logs").push({
-        invNum: invNum,
-        type: type,
-        party: customerName,
+      let logEntry = {
+        date: new Date().toISOString(),
+        type: isReturn ? 'SALE_RETURN' : 'SALE',
+        party: partyName,
         items: saleCart,
-        total: totalBill,
-        paid: paid,
-        date: new Date().toLocaleDateString('en-CA')
-      });
+        grandTotal: grandTotal,
+        paidAmount: paid,
+        discount: discount
+      };
 
-      alert(isReturn ? "Sales Return Recorded!" : "Sale Recorded Successfully!");
-      saleCart = [];
-      document.getElementById('s-is-return').checked = false;
-      document.getElementById('s-customer-select').value = '';
-      document.getElementById('s-customer-new').value = '';
-      document.getElementById('s-customer-new-wrap').classList.add('hidden');
-      document.getElementById('s-paid').value = 0;
-      renderSaleCart();
+      rtdb.ref('logs').push(logEntry).then(() => {
+        alert('Sale Transaction Saved!');
+        saleCart = [];
+        renderSaleCart();
+        document.getElementById('s-paid').value = '0';
+        document.getElementById('s-discount').value = '0';
+        document.getElementById('s-customer-new').value = '';
+        document.getElementById('s-is-return').checked = false;
+        togglePartyInput('s-customer-select', 's-customer-new-wrap');
+      });
     }
 
     function addItemToPurchaseCart() {
       let name = document.getElementById('p-name').value.trim();
       let category = document.getElementById('p-category').value.trim() || 'General';
       let opening = parseInt(document.getElementById('p-opening').value) || 0;
-      let qty = parseInt(document.getElementById('p-qty').value) || 1;
+      let qty = parseInt(document.getElementById('p-qty').value) || 0;
       let cost = parseFloat(document.getElementById('p-cost').value) || 0;
       let sell = parseFloat(document.getElementById('p-sell').value) || 0;
 
-      if(!name) return alert("Item name is required.");
+      if(!name || qty <= 0) {
+        alert('Please enter a valid item name and quantity.');
+        return;
+      }
 
-      purchaseCart.push({ name, category, opening, qty, cost, sell, total: qty * cost });
+      purchaseCart.push({ name, category, opening, qty, cost, sell });
       renderPurchaseCart();
 
+      // Reset item inputs
       document.getElementById('p-name').value = '';
+      document.getElementById('p-category').value = '';
       document.getElementById('p-opening').value = '0';
       document.getElementById('p-qty').value = '1';
       document.getElementById('p-cost').value = '0';
@@ -876,9 +946,21 @@
       let container = document.getElementById('p-cart-items');
       container.innerHTML = '';
       let subTotal = 0;
-      purchaseCart.forEach((item, idx) => {
-        subTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> (${item.category}) x ${item.qty} @ ₹${item.cost} = ₹${item.total.toFixed(2)}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
+
+      purchaseCart.forEach((item, index) => {
+        let total = item.qty * item.cost;
+        subTotal += total;
+
+        let div = document.createElement('div');
+        div.className = 'cart-item';
+        div.innerHTML = `
+          <div>
+            <b>${item.name}</b> (${item.category})<br>
+            <small>${item.qty} x ₹${item.cost.toFixed(2)} = ₹${total.toFixed(2)} | Sell: ₹${item.sell.toFixed(2)}</small>
+          </div>
+          <button class="btn-danger" onclick="removePurchaseCartItem(${index})">X</button>
+        `;
+        container.appendChild(div);
       });
 
       let misc = parseFloat(document.getElementById('p-misc').value) || 0;
@@ -888,84 +970,82 @@
       document.getElementById('p-grand-total').textContent = grandTotal.toFixed(2);
     }
 
-    async function submitFinalPurchase() {
-      if(purchaseCart.length === 0) return alert("Invoice is empty!");
+    function removePurchaseCartItem(index) {
+      purchaseCart.splice(index, 1);
+      renderPurchaseCart();
+    }
 
-      let isReturn = document.getElementById('p-is-return').checked;
-      let rawInv = document.getElementById('p-inv-num').value.trim();
-      let invNum = rawInv || ((isReturn ? "PRET-" : "PUR-") + Date.now().toString().slice(-6));
-
-      let selectVal = document.getElementById('p-supplier-select').value;
-      let supplierName = '';
-
-      if(selectVal === '__NEW__') {
-        let rawInput = document.getElementById('p-supplier-new').value;
-        supplierName = validatePartyName(rawInput, suppliersList);
-        if(!supplierName) return alert("Please enter a valid supplier name.");
-      } else if(selectVal) {
-        supplierName = selectVal;
-      } else {
-        supplierName = 'Cash Vendor';
+    function submitFinalPurchase() {
+      if(purchaseCart.length === 0) {
+        alert('Purchase cart is empty!');
+        return;
       }
 
+      let selectVal = document.getElementById('p-supplier-select').value;
+      let supplierName = selectVal === '__NEW__' ? document.getElementById('p-supplier-new').value : selectVal;
+
+      supplierName = validatePartyName(supplierName);
+      if(!supplierName) {
+        alert('Please specify a valid supplier name.');
+        return;
+      }
+
+      let invNum = document.getElementById('p-inv-num').value.trim() || 'N/A';
+      let isReturn = document.getElementById('p-is-return').checked;
       let paid = parseFloat(document.getElementById('p-paid').value) || 0;
+      let discount = parseFloat(document.getElementById('p-discount').value) || 0;
       let misc = parseFloat(document.getElementById('p-misc').value) || 0;
-      let itemsTotal = purchaseCart.reduce((a, b) => a + b.total, 0);
-      let grandTotal = itemsTotal + misc;
-      let type = isReturn ? 'PURCHASE_RETURN' : 'PURCHASE';
+      let subTotal = purchaseCart.reduce((acc, item) => acc + (item.qty * item.cost), 0);
+      let grandTotal = subTotal + misc;
 
-      for (let item of purchaseCart) {
-        let allocatedFreightPerUnit = 0;
-        if (misc > 0 && itemsTotal > 0) {
-          let itemShareOfFreight = (item.total / itemsTotal) * misc;
-          allocatedFreightPerUnit = itemShareOfFreight / item.qty;
-        }
-        let effectiveUnitCost = parseFloat(item.cost) + allocatedFreightPerUnit;
-
+      // Ensure Items exist in Catalog Database
+      purchaseCart.forEach(item => {
         let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
         if(existing) {
-          await rtdb.ref("items/" + existing.key).update({
-            category: item.category,
-            purchaseRate: effectiveUnitCost,
-            sellingPrice: parseFloat(item.sell) || existing.sellingPrice || 0
+          rtdb.ref('items/' + existing.key).update({
+            purchaseRate: item.cost,
+            sellingPrice: item.sell,
+            category: item.category
           });
         } else {
-          await rtdb.ref("items").push({
+          rtdb.ref('items').push({
             name: item.name,
             category: item.category,
             openingStock: item.opening,
-            purchaseRate: effectiveUnitCost,
-            sellingPrice: parseFloat(item.sell) || 0
+            purchaseRate: item.cost,
+            sellingPrice: item.sell
           });
         }
-      }
-
-      await rtdb.ref("logs").push({
-        invNum: invNum,
-        type: type,
-        party: supplierName,
-        items: purchaseCart,
-        miscCharges: misc,
-        total: grandTotal,
-        paid: paid,
-        date: new Date().toLocaleDateString('en-CA')
       });
 
-      alert(isReturn ? "Purchase Return Saved!" : "Purchase Saved Successfully!");
-      purchaseCart = [];
-      document.getElementById('p-is-return').checked = false;
-      document.getElementById('p-inv-num').value = '';
-      document.getElementById('p-supplier-select').value = '';
-      document.getElementById('p-supplier-new').value = '';
-      document.getElementById('p-supplier-new-wrap').classList.add('hidden');
-      document.getElementById('p-paid').value = 0;
-      document.getElementById('p-misc').value = 0;
-      renderPurchaseCart();
+      let logEntry = {
+        date: new Date().toISOString(),
+        type: isReturn ? 'PURCHASE_RETURN' : 'PURCHASE',
+        invoiceNum: invNum,
+        party: supplierName,
+        items: purchaseCart,
+        grandTotal: grandTotal,
+        miscCharges: misc,
+        paidAmount: paid,
+        discount: discount
+      };
+
+      rtdb.ref('logs').push(logEntry).then(() => {
+        alert('Purchase Transaction Saved!');
+        purchaseCart = [];
+        renderPurchaseCart();
+        document.getElementById('p-inv-num').value = '';
+        document.getElementById('p-paid').value = '0';
+        document.getElementById('p-discount').value = '0';
+        document.getElementById('p-misc').value = '0';
+        document.getElementById('p-supplier-new').value = '';
+        document.getElementById('p-is-return').checked = false;
+        togglePartyInput('p-supplier-select', 'p-supplier-new-wrap');
+      });
     }
 
     function renderItemDirectory(query) {
       let tbody = document.getElementById('directory-table-body');
-      if(!tbody) return;
       tbody.innerHTML = '';
 
       let filtered = allItems.filter(i => 
@@ -974,217 +1054,240 @@
       );
 
       filtered.forEach(item => {
-        let stock = calculateStockForItem(item.name);
-        let pRate = getItemPurchaseCost(item.name);
-        tbody.innerHTML += `
-          <tr>
-            <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
-            <td><b>${stock.closing}</b></td>
-            <td class="text-blue"><b>₹${pRate.toFixed(2)}</b></td>
-            <td>₹${(item.sellingPrice || 0).toFixed(2)}</td>
-          </tr>
+        let stockInfo = calculateStockForItem(item.name);
+        let effCost = getItemPurchaseCost(item.name);
+
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
+          <td><b>${stockInfo.closing}</b></td>
+          <td>₹${effCost.toFixed(2)}</td>
+          <td>₹${(parseFloat(item.sellingPrice) || 0).toFixed(2)}</td>
         `;
+        tbody.appendChild(tr);
       });
     }
 
     function renderPartyDropdown() {
       let type = document.getElementById('acc-type').value;
-      let select = document.getElementById('acc-party');
-      select.innerHTML = '';
-      
-      let list = [];
-      if(type === 'Customer') list = customersList;
-      else if(type === 'Vendor') list = suppliersList;
-      else list = allPartiesList;
+      let partySelect = document.getElementById('acc-party');
+      partySelect.innerHTML = '<option value="">-- Select Party --</option>';
 
-      list.sort().forEach(p => {
+      let targetList = type === 'Customer' ? customersList : suppliersList;
+      targetList.forEach(p => {
         let opt = document.createElement('option');
         opt.value = p;
         opt.textContent = p;
-        select.appendChild(opt);
+        partySelect.appendChild(opt);
       });
 
       renderPartyStatement();
     }
 
-    // Unified Party Statement and Ledger Calculator
+    // Calculating Party Ledgers using the specified simplified formulas
+    function calculatePartyMetrics(partyName, partyType) {
+      let totSales = 0;
+      let totPurchases = 0;
+      let totSReturn = 0;
+      let totPReturn = 0;
+      let totDiscAllowed = 0;
+      let totDiscReceived = 0;
+      let totPaymentsRec = 0;
+      let totPaymentsPaid = 0;
+
+      let cleanParty = partyName.trim().toLowerCase();
+
+      allLogs.forEach(l => {
+        if(l.party && l.party.trim().toLowerCase() === cleanParty) {
+          let amt = parseFloat(l.grandTotal) || 0;
+          let paid = parseFloat(l.paidAmount) || 0;
+          let disc = parseFloat(l.discount) || 0;
+
+          if(l.type === 'SALE') {
+            totSales += amt;
+            totPaymentsRec += paid;
+            totDiscAllowed += disc;
+          } else if(l.type === 'SALE_RETURN') {
+            totSReturn += amt;
+            totPaymentsPaid += paid; // Cash refunded to customer
+          } else if(l.type === 'PURCHASE') {
+            totPurchases += amt;
+            totPaymentsPaid += paid;
+            totDiscReceived += disc;
+          } else if(l.type === 'PURCHASE_RETURN') {
+            totPReturn += amt;
+            totPaymentsRec += paid; // Cash received back from supplier
+          }
+        }
+      });
+
+      allPayments.forEach(p => {
+        if(p.party && p.party.trim().toLowerCase() === cleanParty) {
+          let amt = parseFloat(p.amount) || 0;
+          if(p.direction === 'RECEIVED') {
+            totPaymentsRec += amt;
+          } else if(p.direction === 'PAID') {
+            totPaymentsPaid += amt;
+          }
+        }
+      });
+
+      let netBalance = 0;
+      if (partyType === 'Customer') {
+        // Customer Formula: Sales - Payments Received - Sales Return - Discount Allowed - Purchases Made
+        netBalance = totSales - totPaymentsRec - totSReturn - totDiscAllowed - totPurchases;
+      } else {
+        // Vendor Formula: Purchases - Payments Made - Purchase Return - Sales Made - Discount Received
+        netBalance = totPurchases - totPaymentsPaid - totPReturn - totSales - totDiscReceived;
+      }
+
+      return {
+        totSales,
+        totPurchases,
+        totSReturn,
+        totPReturn,
+        totDiscAllowed,
+        totDiscReceived,
+        totPaymentsRec,
+        totPaymentsPaid,
+        netBalance
+      };
+    }
+
     function renderPartyStatement() {
-      let party = document.getElementById('acc-party').value;
+      let partyName = document.getElementById('acc-party').value;
+      let partyType = document.getElementById('acc-type').value;
+
       let tbody = document.querySelector('#party-table tbody');
       tbody.innerHTML = '';
 
-      if(!party) {
-        document.getElementById('party-balance').textContent = "₹0.00";
-        document.getElementById('party-balance-type').textContent = "";
-        document.getElementById('party-tot-sales').textContent = "₹0.00";
-        document.getElementById('party-tot-purchases').textContent = "₹0.00";
-        document.getElementById('party-tot-rec').textContent = "₹0.00";
-        document.getElementById('party-tot-paid').textContent = "₹0.00";
+      if(!partyName) {
+        document.getElementById('party-balance').textContent = '₹0.00';
+        document.getElementById('party-balance-type').textContent = '';
+        document.getElementById('party-tot-sales').textContent = '₹0.00';
+        document.getElementById('party-tot-purchases').textContent = '₹0.00';
+        document.getElementById('party-tot-s-return').textContent = '₹0.00';
+        document.getElementById('party-tot-p-return').textContent = '₹0.00';
+        document.getElementById('party-tot-rec').textContent = '₹0.00';
+        document.getElementById('party-tot-paid').textContent = '₹0.00';
+        document.getElementById('party-tot-disc-allow').textContent = '₹0.00';
+        document.getElementById('party-tot-disc-rec').textContent = '₹0.00';
         return;
       }
 
-      let totalSales = 0;
-      let totalPurchases = 0;
-      let totalReceived = 0;
-      let totalPaidOut = 0;
+      let metrics = calculatePartyMetrics(partyName, partyType);
 
-      let logs = allLogs.filter(l => l.party && l.party.toLowerCase() === party.toLowerCase());
-      let pymts = allPayments.filter(p => p.party && p.party.toLowerCase() === party.toLowerCase());
+      let balEl = document.getElementById('party-balance');
+      let typeEl = document.getElementById('party-balance-type');
 
-      let combined = [];
+      balEl.textContent = '₹' + Math.abs(metrics.netBalance).toFixed(2);
 
-      logs.forEach(l => {
-        combined.push({
-          id: l.id,
-          source: 'LOG',
-          date: l.date,
-          desc: `${l.invNum}`,
-          amount: l.total,
-          paid: l.paid,
-          type: l.type
-        });
-      });
-
-      pymts.forEach(p => {
-        let isReceived = (p.partyType === 'Customer' || p.direction === 'RECEIVED');
-        combined.push({
-          id: p.id,
-          source: 'PAYMENT',
-          date: p.date,
-          desc: `Direct Payment / Adjustment`,
-          amount: 0,
-          paid: p.amount,
-          type: isReceived ? 'PAYMENT_REC' : 'PAYMENT_PAID'
-        });
-      });
-
-      combined.sort((a,b) => new Date(a.date) - new Date(b.date));
-
-      combined.forEach(item => {
-        let amtStr = item.amount ? `₹${item.amount.toFixed(2)}` : '-';
-        let paidStr = item.paid ? `₹${item.paid.toFixed(2)}` : '-';
-        
-        let badgeClass = 'badge-sale';
-        if(item.type === 'PURCHASE') badgeClass = 'badge-purchase';
-        if(item.type.includes('RETURN') || item.type.includes('PAYMENT')) badgeClass = 'badge-payment';
-
-        let actions = '';
-        if(item.source === 'PAYMENT') {
-          actions = `<button class="btn-edit" onclick="openEditPaymentModal('${item.id}')">Edit</button><button class="btn-danger" onclick="deletePayment('${item.id}')">Del</button>`;
+      if (partyType === 'Customer') {
+        if (metrics.netBalance >= 0) {
+          balEl.className = 'stat-val text-green';
+          typeEl.textContent = '(Receivable from Customer)';
+          typeEl.style.color = '#16a34a';
         } else {
-          actions = `<button class="btn-view" onclick="openInvoiceModal('${item.id}')">View</button>`;
+          balEl.className = 'stat-val text-red';
+          typeEl.textContent = '(Payable to Customer)';
+          typeEl.style.color = '#dc2626';
         }
+      } else { // Vendor
+        if (metrics.netBalance >= 0) {
+          balEl.className = 'stat-val text-red';
+          typeEl.textContent = '(Net Payable to Vendor)';
+          typeEl.style.color = '#dc2626';
+        } else {
+          balEl.className = 'stat-val text-green';
+          typeEl.textContent = '(Receivable from Vendor)';
+          typeEl.style.color = '#16a34a';
+        }
+      }
 
-        tbody.innerHTML += `
-          <tr>
-            <td>${item.date}</td>
-            <td><span class="badge ${badgeClass}">${item.type}</span></td>
-            <td>${item.desc}</td>
-            <td>${amtStr}</td>
-            <td>${paidStr}</td>
-            <td>${actions}</td>
-          </tr>
+      document.getElementById('party-tot-sales').textContent = '₹' + metrics.totSales.toFixed(2);
+      document.getElementById('party-tot-purchases').textContent = '₹' + metrics.totPurchases.toFixed(2);
+      document.getElementById('party-tot-s-return').textContent = '₹' + metrics.totSReturn.toFixed(2);
+      document.getElementById('party-tot-p-return').textContent = '₹' + metrics.totPReturn.toFixed(2);
+      document.getElementById('party-tot-rec').textContent = '₹' + metrics.totPaymentsRec.toFixed(2);
+      document.getElementById('party-tot-paid').textContent = '₹' + metrics.totPaymentsPaid.toFixed(2);
+      document.getElementById('party-tot-disc-allow').textContent = '₹' + metrics.totDiscAllowed.toFixed(2);
+      document.getElementById('party-tot-disc-rec').textContent = '₹' + metrics.totDiscReceived.toFixed(2);
+
+      // Populate Ledger Table
+      let cleanParty = partyName.trim().toLowerCase();
+      let entries = [];
+
+      allLogs.forEach(l => {
+        if(l.party && l.party.trim().toLowerCase() === cleanParty) {
+          entries.push({
+            id: l.id,
+            isLog: true,
+            date: l.date,
+            type: l.type,
+            desc: l.invoiceNum ? `Inv #${l.invoiceNum}` : 'Direct Transaction',
+            amount: l.grandTotal,
+            paid: l.paidAmount
+          });
+        }
+      });
+
+      allPayments.forEach(p => {
+        if(p.party && p.party.trim().toLowerCase() === cleanParty) {
+          entries.push({
+            id: p.id,
+            isLog: false,
+            date: p.date,
+            type: p.direction === 'RECEIVED' ? 'CASH_IN' : 'CASH_OUT',
+            desc: 'Direct Payment / Adj',
+            amount: p.amount,
+            paid: p.amount
+          });
+        }
+      });
+
+      entries.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      entries.forEach(e => {
+        let tr = document.createElement('tr');
+        let dt = new Date(e.date).toLocaleDateString();
+        tr.innerHTML = `
+          <td>${dt}</td>
+          <td><span class="badge ${e.type.includes('SALE') ? 'badge-sale' : 'badge-purchase'}">${e.type}</span></td>
+          <td>${e.desc}</td>
+          <td>₹${(parseFloat(e.amount)||0).toFixed(2)}</td>
+          <td>₹${(parseFloat(e.paid)||0).toFixed(2)}</td>
+          <td>
+            ${e.isLog ? `<button class="btn-edit" onclick="openEditModal('${e.id}')">Edit</button>` : `<button class="btn-edit" onclick="openEditPaymentModal('${e.id}')">Edit</button>`}
+            <button class="btn-danger" onclick="deleteEntry('${e.id}', ${e.isLog})">X</button>
+          </td>
         `;
-
-        if(item.type === 'SALE') {
-          totalSales += item.amount;
-          totalReceived += item.paid;
-        } else if(item.type === 'SALE_RETURN') {
-          totalSales -= item.amount;
-          totalReceived -= item.paid;
-        } else if(item.type === 'PURCHASE') {
-          totalPurchases += item.amount;
-          totalPaidOut += item.paid;
-        } else if(item.type === 'PURCHASE_RETURN') {
-          totalPurchases -= item.amount;
-          totalPaidOut -= item.paid;
-        } else if(item.type === 'PAYMENT_REC') {
-          totalReceived += item.paid;
-        } else if(item.type === 'PAYMENT_PAID') {
-          totalPaidOut += item.paid;
-        }
+        tbody.appendChild(tr);
       });
+    }
 
-      // Unified Formula: Net Due = (Sales - Receipts) - (Purchases - Payments Out)
-      let netReceivable = (totalSales - totalReceived) - (totalPurchases - totalPaidOut);
+    function savePartyPayment() {
+      let partyName = document.getElementById('acc-party').value;
+      let partyType = document.getElementById('acc-type').value;
+      let direction = document.getElementById('party-adjust-type').value;
+      let amount = parseFloat(document.getElementById('party-adjust-amount').value) || 0;
 
-      let balanceEl = document.getElementById('party-balance');
-      let balanceTypeEl = document.getElementById('party-balance-type');
-
-      if(netReceivable > 0) {
-        balanceEl.className = "stat-val text-green";
-        balanceEl.textContent = `₹${netReceivable.toFixed(2)}`;
-        balanceTypeEl.textContent = "(Receivable - Customer owes you)";
-        balanceTypeEl.style.color = "#16a34a";
-      } else if(netReceivable < 0) {
-        balanceEl.className = "stat-val text-red";
-        balanceEl.textContent = `₹${Math.abs(netReceivable).toFixed(2)}`;
-        balanceTypeEl.textContent = "(Payable - You owe customer/vendor)";
-        balanceTypeEl.style.color = "#dc2626";
-      } else {
-        balanceEl.className = "stat-val text-blue";
-        balanceEl.textContent = "₹0.00";
-        balanceTypeEl.textContent = "(Settled / Zero Balance)";
-        balanceTypeEl.style.color = "#2563eb";
+      if(!partyName || amount <= 0) {
+        alert('Please select a party and enter a valid amount.');
+        return;
       }
 
-      document.getElementById('party-tot-sales').textContent = `₹${totalSales.toFixed(2)}`;
-      document.getElementById('party-tot-purchases').textContent = `₹${totalPurchases.toFixed(2)}`;
-      document.getElementById('party-tot-rec').textContent = `₹${totalReceived.toFixed(2)}`;
-      document.getElementById('party-tot-paid').textContent = `₹${totalPaidOut.toFixed(2)}`;
-    }
+      let paymentObj = {
+        date: new Date().toISOString(),
+        party: partyName,
+        partyType: partyType,
+        direction: direction,
+        amount: amount
+      };
 
-    async function savePartyPayment() {
-      let party = document.getElementById('acc-party').value;
-      let dir = document.getElementById('party-adjust-type').value;
-      let amt = parseFloat(document.getElementById('party-adjust-amount').value);
-
-      if(!party || !amt) return alert("Select a party and enter amount.");
-
-      await rtdb.ref("payments").push({
-        party: party,
-        partyType: (dir === 'RECEIVED' ? 'Customer' : 'Vendor'),
-        direction: dir,
-        amount: amt,
-        date: new Date().toLocaleDateString('en-CA')
+      rtdb.ref('payments').push(paymentObj).then(() => {
+        alert('Payment Recorded!');
+        document.getElementById('party-adjust-amount').value = '';
       });
-
-      document.getElementById('party-adjust-amount').value = '';
-      alert("Payment recorded!");
-    }
-
-    function openEditPaymentModal(id) {
-      let p = allPayments.find(item => item.id === id);
-      if(!p) return;
-      document.getElementById('edit-pay-id').value = id;
-      document.getElementById('edit-pay-party').value = p.party;
-      document.getElementById('edit-pay-direction').value = p.direction || (p.partyType === 'Customer' ? 'RECEIVED' : 'PAID');
-      document.getElementById('edit-pay-amount').value = p.amount;
-      document.getElementById('edit-payment-modal').classList.remove('hidden');
-    }
-
-    function closeEditPaymentModal() {
-      document.getElementById('edit-payment-modal').classList.add('hidden');
-    }
-
-    async function saveEditedPayment() {
-      let id = document.getElementById('edit-pay-id').value;
-      let amt = parseFloat(document.getElementById('edit-pay-amount').value) || 0;
-      let dir = document.getElementById('edit-pay-direction').value;
-
-      await rtdb.ref("payments/" + id).update({ 
-        amount: amt,
-        direction: dir,
-        partyType: (dir === 'RECEIVED' ? 'Customer' : 'Vendor')
-      });
-      closeEditPaymentModal();
-      alert("Payment updated!");
-    }
-
-    async function deletePayment(id) {
-      if(confirm("Delete this payment entry?")) {
-        await rtdb.ref("payments/" + id).remove();
-      }
     }
 
     function renderHistoryTable() {
@@ -1192,58 +1295,51 @@
       tbody.innerHTML = '';
 
       allLogs.slice().reverse().forEach(log => {
-        let badgeClass = 'badge-sale';
-        if(log.type === 'PURCHASE') badgeClass = 'badge-purchase';
-        if(log.type.includes('RETURN')) badgeClass = 'badge-payment';
-
-        tbody.innerHTML += `
-          <tr>
-            <td><span class="badge ${badgeClass}">${log.type}</span></td>
-            <td><b>${log.invNum}</b><br><small>${log.party}</small></td>
-            <td>₹${(log.total || 0).toFixed(2)}</td>
-            <td>₹${(log.paid || 0).toFixed(2)}</td>
-            <td>
-              <button class="btn-view" onclick="openInvoiceModal('${log.id}')">View</button>
-              <button class="btn-edit" onclick="openEditModal('${log.id}')">Edit</button>
-              <button class="btn-danger" onclick="deleteLog('${log.id}')">Del</button>
-            </td>
-          </tr>
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="badge ${log.type.includes('SALE') ? 'badge-sale' : 'badge-purchase'}">${log.type}</span></td>
+          <td><b>${log.party}</b><br><small style="color:#6b7280">${log.invoiceNum || ''}</small></td>
+          <td>₹${(parseFloat(log.grandTotal)||0).toFixed(2)}</td>
+          <td>₹${(parseFloat(log.paidAmount)||0).toFixed(2)}</td>
+          <td>
+            <button class="btn-view" onclick="viewInvoiceModal('${log.id}')">View</button>
+            <button class="btn-edit" onclick="openEditModal('${log.id}')">Edit</button>
+            <button class="btn-danger" onclick="deleteEntry('${log.id}', true)">X</button>
+          </td>
         `;
+        tbody.appendChild(tr);
       });
     }
 
-    function openInvoiceModal(logId) {
+    function viewInvoiceModal(logId) {
       let log = allLogs.find(l => l.id === logId);
       if(!log) return;
 
-      document.getElementById('modal-title').textContent = `${log.type} - ${log.invNum}`;
-      document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${log.date}`;
+      document.getElementById('modal-title').textContent = `${log.type} - Details`;
+      document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${new Date(log.date).toLocaleString()}`;
 
       let tbody = document.querySelector('#modal-items-table tbody');
       tbody.innerHTML = '';
 
-      let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost, total: log.total }];
-      items.forEach(i => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${i.name}</td>
-            <td>${i.qty}</td>
-            <td>₹${(i.rate || i.cost || 0).toFixed(2)}</td>
-            <td>₹${(i.total || 0).toFixed(2)}</td>
-          </tr>
+      (log.items || []).forEach(item => {
+        let r = parseFloat(item.rate || item.cost || 0);
+        let q = parseInt(item.qty) || 1;
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.name}</td>
+          <td>${q}</td>
+          <td>₹${r.toFixed(2)}</td>
+          <td>₹${(q * r).toFixed(2)}</td>
         `;
+        tbody.appendChild(tr);
       });
 
-      let misc = log.miscCharges || 0;
-      let total = log.total || 0;
-      let paid = log.paid || 0;
-      let due = total - paid;
-
-      document.getElementById('modal-summary-box').innerHTML = `
-        ${misc ? `<div>Freight / Misc Charges: ₹${misc.toFixed(2)}</div>` : ''}
-        <div><b>Grand Total: ₹${total.toFixed(2)}</b></div>
-        <div>Paid: ₹${paid.toFixed(2)}</div>
-        <div style="color: red; font-weight: bold;">Due: ₹${due.toFixed(2)}</div>
+      let box = document.getElementById('modal-summary-box');
+      box.innerHTML = `
+        <div>Grand Total: <b>₹${(parseFloat(log.grandTotal)||0).toFixed(2)}</b></div>
+        <div>Discount: <b>₹${(parseFloat(log.discount)||0).toFixed(2)}</b></div>
+        <div>Paid Amount: <b>₹${(parseFloat(log.paidAmount)||0).toFixed(2)}</b></div>
+        <div style="color:#dc2626; font-weight:bold;">Due Balance: ₹${((parseFloat(log.grandTotal)||0) - (parseFloat(log.paidAmount)||0) - (parseFloat(log.discount)||0)).toFixed(2)}</div>
       `;
 
       document.getElementById('invoice-modal').classList.remove('hidden');
@@ -1253,202 +1349,94 @@
       document.getElementById('invoice-modal').classList.add('hidden');
     }
 
-    function openEditModal(logId) {
-      let log = allLogs.find(l => l.id === logId);
-      if(!log) return;
-
-      document.getElementById('edit-log-id').value = logId;
-      document.getElementById('edit-party').value = log.party;
-      document.getElementById('edit-paid').value = log.paid;
-
-      let miscWrap = document.getElementById('edit-misc-wrap');
-      if(log.type.includes('PURCHASE')) {
-        miscWrap.classList.remove('hidden');
-        document.getElementById('edit-misc').value = log.miscCharges || 0;
-      } else {
-        miscWrap.classList.add('hidden');
-        document.getElementById('edit-misc').value = 0;
-      }
-
-      let container = document.getElementById('edit-items-container');
-      container.innerHTML = '';
-
-      let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
-      items.forEach((item) => {
-        let rateVal = item.rate || item.cost || 0;
-        container.innerHTML += `
-          <div style="margin-top: 8px; padding: 8px; background: #f9fafb; border-radius: 6px;">
-            <b>${item.name}</b>
-            <input type="hidden" class="edit-item-name" value="${item.name}">
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <div style="flex: 1;">
-                <label style="margin:0;">Qty</label>
-                <input type="number" class="edit-item-qty" value="${item.qty}">
-              </div>
-              <div style="flex: 1;">
-                <label style="margin:0;">Rate / Cost (₹)</label>
-                <input type="number" class="edit-item-rate" value="${rateVal}">
-              </div>
-            </div>
-          </div>
-        `;
-      });
-
-      document.getElementById('edit-modal').classList.remove('hidden');
-    }
-
-    function closeEditModal() {
-      document.getElementById('edit-modal').classList.add('hidden');
-    }
-
-    async function saveEditedInvoice() {
-      let logId = document.getElementById('edit-log-id').value;
-      let log = allLogs.find(l => l.id === logId);
-      if(!log) return;
-
-      let party = document.getElementById('edit-party').value;
-      let paid = parseFloat(document.getElementById('edit-paid').value) || 0;
-      let newMisc = parseFloat(document.getElementById('edit-misc').value) || 0;
-
-      let names = document.querySelectorAll('.edit-item-name');
-      let qtys = document.querySelectorAll('.edit-item-qty');
-      let rates = document.querySelectorAll('.edit-item-rate');
-
-      let newItems = [];
-      let itemsTotal = 0;
-
-      for (let idx = 0; idx < names.length; idx++) {
-        let n = names[idx].value;
-        let q = parseInt(qtys[idx].value) || 0;
-        let r = parseFloat(rates[idx].value) || 0;
-        let t = q * r;
-        itemsTotal += t;
-
-        if(log.type.includes('PURCHASE')) {
-          newItems.push({ name: n, qty: q, cost: r, total: t });
-        } else {
-          newItems.push({ name: n, qty: q, rate: r, total: t });
-        }
-      }
-
-      if (log.type.includes('PURCHASE')) {
-        for (let idx = 0; idx < newItems.length; idx++) {
-          let item = newItems[idx];
-          let allocatedFreightPerUnit = 0;
-          if (newMisc > 0 && itemsTotal > 0) {
-            let itemShareOfFreight = (item.total / itemsTotal) * newMisc;
-            allocatedFreightPerUnit = itemShareOfFreight / item.qty;
-          }
-          let effectiveUnitCost = item.cost + allocatedFreightPerUnit;
-
-          let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
-          if(existing) {
-            await rtdb.ref("items/" + existing.key).update({ purchaseRate: effectiveUnitCost });
-          }
-        }
-      }
-
-      let grandTotal = itemsTotal + (log.type.includes('PURCHASE') ? newMisc : 0);
-
-      await rtdb.ref("logs/" + logId).update({
-        party: party,
-        paid: paid,
-        items: newItems,
-        miscCharges: newMisc,
-        total: grandTotal
-      });
-
-      closeEditModal();
-      alert("Invoice updated successfully!");
-    }
-
-    async function deleteLog(logId) {
-      if(confirm("Are you sure you want to delete this invoice?")) {
-        await rtdb.ref("logs/" + logId).remove();
-      }
-    }
-
     function renderStockSummary() {
-      let netSales = 0;
-      let netPurchases = 0;
-      let totalCOGS = 0;
+      let totalSales = 0;
+      let totalPurchases = 0;
+      let totalCogs = 0;
+      let categoryProfitMap = {};
 
-      let catSalesMap = {};
-      let catCOGSMap = {};
-      let catQtyMap = {};
+      allLogs.forEach(l => {
+        let amt = parseFloat(l.grandTotal) || 0;
+        if(l.type === 'SALE') totalSales += amt;
+        if(l.type === 'SALE_RETURN') totalSales -= amt;
+        if(l.type === 'PURCHASE') totalPurchases += amt;
+        if(l.type === 'PURCHASE_RETURN') totalPurchases -= amt;
 
-      allLogs.forEach(log => {
-        let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
-        items.forEach(i => {
-          let catalogItem = allItems.find(c => c.name && c.name.toLowerCase() === (i.name || '').toLowerCase());
-          let category = catalogItem ? (catalogItem.category || 'General') : 'General';
-          
-          let costRate = getItemPurchaseCost(i.name);
-          let q = parseInt(i.qty) || 0;
+        if(l.type === 'SALE' || l.type === 'SALE_RETURN') {
+          (l.items || []).forEach(it => {
+            let q = parseInt(it.qty) || 0;
+            let r = parseFloat(it.rate) || 0;
+            let itemCost = getItemPurchaseCost(it.name);
+            let lineCogs = q * itemCost;
+            let lineSales = q * r;
 
-          if(!catSalesMap[category]) catSalesMap[category] = 0;
-          if(!catCOGSMap[category]) catCOGSMap[category] = 0;
+            if(l.type === 'SALE_RETURN') {
+              lineCogs = -lineCogs;
+              lineSales = -lineSales;
+            }
 
-          if(log.type === 'SALE') {
-            let saleVal = i.total || (q * (i.rate || 0));
-            let cogsVal = q * costRate;
-            netSales += saleVal;
-            totalCOGS += cogsVal;
-            catSalesMap[category] += saleVal;
-            catCOGSMap[category] += cogsVal;
-          } else if(log.type === 'SALE_RETURN') {
-            let saleVal = i.total || (q * (i.rate || 0));
-            let cogsVal = q * costRate;
-            netSales -= saleVal;
-            totalCOGS -= cogsVal;
-            catSalesMap[category] -= saleVal;
-            catCOGSMap[category] -= cogsVal;
-          } else if(log.type === 'PURCHASE') {
-            netPurchases += (i.total || (q * (i.cost || 0)));
-          } else if(log.type === 'PURCHASE_RETURN') {
-            netPurchases -= (i.total || (q * (i.cost || 0)));
-          }
-        });
+            totalCogs += lineCogs;
+
+            let cat = 'General';
+            let catMatch = allItems.find(i => i.name.toLowerCase() === it.name.toLowerCase());
+            if(catMatch && catMatch.category) cat = catMatch.category;
+
+            if(!categoryProfitMap[cat]) categoryProfitMap[cat] = { sales: 0, cogs: 0 };
+            categoryProfitMap[cat].sales += lineSales;
+            categoryProfitMap[cat].cogs += lineCogs;
+          });
+        }
       });
 
-      let grossProfit = netSales - totalCOGS;
+      document.getElementById('stat-sales').textContent = '₹' + totalSales.toFixed(2);
+      document.getElementById('stat-purchases').textContent = '₹' + totalPurchases.toFixed(2);
+      document.getElementById('prof-sales').textContent = '₹' + totalSales.toFixed(2);
+      document.getElementById('prof-cogs').textContent = '₹' + totalCogs.toFixed(2);
 
-      document.getElementById('stat-sales').textContent = `₹${netSales.toFixed(2)}`;
-      document.getElementById('stat-purchases').textContent = `₹${netPurchases.toFixed(2)}`;
-      document.getElementById('prof-sales').textContent = `₹${netSales.toFixed(2)}`;
-      document.getElementById('prof-cogs').textContent = `₹${totalCOGS.toFixed(2)}`;
-      document.getElementById('prof-gross').textContent = `₹${grossProfit.toFixed(2)}`;
+      let grossProfit = totalSales - totalCogs;
+      let marginPct = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
 
+      let grossEl = document.getElementById('prof-gross');
+      grossEl.textContent = '₹' + grossProfit.toFixed(2);
+      grossEl.className = grossProfit >= 0 ? 'text-green' : 'text-red';
+
+      document.getElementById('prof-margin-pct').textContent = `(${marginPct.toFixed(2)}%)`;
+
+      // Render Category Profitability
       let catProfTbody = document.querySelector('#category-profitability-table tbody');
       catProfTbody.innerHTML = '';
-      let categories = Array.from(new Set([...Object.keys(catSalesMap), ...allItems.map(i => i.category || 'General')]));
+      for (let cat in categoryProfitMap) {
+        let cSales = categoryProfitMap[cat].sales;
+        let cCogs = categoryProfitMap[cat].cogs;
+        let cGross = cSales - cCogs;
+        let cMargin = cSales > 0 ? (cGross / cSales) * 100 : 0;
 
-      categories.forEach(cat => {
-        let s = catSalesMap[cat] || 0;
-        let c = catCOGSMap[cat] || 0;
-        let p = s - c;
-        catProfTbody.innerHTML += `
-          <tr>
-            <td><b>${cat}</b></td>
-            <td>₹${s.toFixed(2)}</td>
-            <td>₹${c.toFixed(2)}</td>
-            <td class="${p >= 0 ? 'text-green' : 'text-red'}"><b>₹${p.toFixed(2)}</b></td>
-          </tr>
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${cat}</b></td>
+          <td>₹${cSales.toFixed(2)}</td>
+          <td>₹${cCogs.toFixed(2)}</td>
+          <td class="${cGross >= 0 ? 'text-green' : 'text-red'}"><b>₹${cGross.toFixed(2)}</b></td>
+          <td><b>${cMargin.toFixed(2)}%</b></td>
         `;
-      });
+        catProfTbody.appendChild(tr);
+      }
 
+      // Render Category Stock Quantities
+      let catStockMap = {};
       allItems.forEach(i => {
         let cat = i.category || 'General';
-        let stock = calculateStockForItem(i.name);
-        if(!catQtyMap[cat]) catQtyMap[cat] = 0;
-        catQtyMap[cat] += stock.closing;
+        let stock = calculateStockForItem(i.name).closing;
+        catStockMap[cat] = (catStockMap[cat] || 0) + stock;
       });
 
-      let catSummaryTbody = document.querySelector('#category-summary-table tbody');
-      catSummaryTbody.innerHTML = '';
-      Object.keys(catQtyMap).forEach(cat => {
-        catSummaryTbody.innerHTML += `<tr><td><b>${cat}</b></td><td><b>${catQtyMap[cat]}</b></td></tr>`;
-      });
+      let catTbody = document.querySelector('#category-summary-table tbody');
+      catTbody.innerHTML = '';
+      for(let cat in catStockMap) {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td><b>${cat}</b></td><td>${catStockMap[cat]}</td>`;
+        catTbody.appendChild(tr);
+      }
 
       renderStockSummaryTable('');
     }
@@ -1459,258 +1447,310 @@
 
       let filtered = allItems.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
       filtered.forEach(item => {
-        let stock = calculateStockForItem(item.name);
-        tbody.innerHTML += `
-          <tr>
-            <td><b>${item.name}</b></td>
-            <td>${stock.opening}</td>
-            <td class="text-green">+${stock.purchased}</td>
-            <td class="text-red">-${stock.sold}</td>
-            <td><b>${stock.closing}</b></td>
-          </tr>
+        let info = calculateStockForItem(item.name);
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${item.name}</b></td>
+          <td>${info.opening}</td>
+          <td>${info.purchased}</td>
+          <td>${info.sold}</td>
+          <td><b>${info.closing}</b></td>
         `;
+        tbody.appendChild(tr);
       });
-    }
-
-    function normalizeDateToISO(dateStr) {
-      if (!dateStr) return '';
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-
-      if (dateStr.includes('/')) {
-        let parts = dateStr.split('/');
-        if (parts.length === 3) {
-          let p0 = parts[0].padStart(2, '0');
-          let p1 = parts[1].padStart(2, '0');
-          let p2 = parts[2];
-          
-          if (p0.length === 4) {
-            return `${p0}-${p1}-${p2}`;
-          }
-          return `${p2}-${p1}-${p0}`;
-        }
-      }
-      
-      let d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        let year = d.getFullYear();
-        let month = String(d.getMonth() + 1).padStart(2, '0');
-        let day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }
-
-      return dateStr;
     }
 
     function renderDailyTrends() {
-      let filter = document.getElementById('daily-date-filter').value;
+      let dateFilter = document.getElementById('daily-date-filter').value;
       let tbody = document.getElementById('daily-trends-table-body');
       tbody.innerHTML = '';
 
-      let dayMap = {};
+      let daysMap = {};
 
       allLogs.forEach(log => {
-        let rawDate = log.date || new Date().toLocaleDateString('en-CA');
-        let isoDate = normalizeDateToISO(rawDate);
+        let d = new Date(log.date).toLocaleDateString('en-CA');
+        if(!daysMap[d]) daysMap[d] = { sales: 0, purchases: 0, cogs: 0 };
 
-        if (!dayMap[isoDate]) {
-          dayMap[isoDate] = { sales: 0, purchases: 0, profit: 0 };
+        let amt = parseFloat(log.grandTotal) || 0;
+        if(log.type === 'SALE') daysMap[d].sales += amt;
+        if(log.type === 'SALE_RETURN') daysMap[d].sales -= amt;
+        if(log.type === 'PURCHASE') daysMap[d].purchases += amt;
+        if(log.type === 'PURCHASE_RETURN') daysMap[d].purchases -= amt;
+
+        if(log.type === 'SALE' || log.type === 'SALE_RETURN') {
+          (log.items || []).forEach(it => {
+            let q = parseInt(it.qty) || 0;
+            let c = getItemPurchaseCost(it.name);
+            let costVal = q * c;
+            if(log.type === 'SALE_RETURN') costVal = -costVal;
+            daysMap[d].cogs += costVal;
+          });
         }
-
-        let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
-
-        items.forEach(i => {
-          let costRate = getItemPurchaseCost(i.name);
-          let q = parseInt(i.qty) || 0;
-
-          if (log.type === 'SALE') {
-            let saleVal = i.total || (q * (i.rate || 0));
-            let cogsVal = q * costRate;
-            dayMap[isoDate].sales += saleVal;
-            dayMap[isoDate].profit += (saleVal - cogsVal);
-          } else if (log.type === 'SALE_RETURN') {
-            let saleVal = i.total || (q * (i.rate || 0));
-            let cogsVal = q * costRate;
-            dayMap[isoDate].sales -= saleVal;
-            dayMap[isoDate].profit -= (saleVal - cogsVal);
-          } else if (log.type === 'PURCHASE') {
-            dayMap[isoDate].purchases += (i.total || (q * (i.cost || 0)));
-          } else if (log.type === 'PURCHASE_RETURN') {
-            dayMap[isoDate].purchases -= (i.total || (q * (i.cost || 0)));
-          }
-        });
       });
 
-      let keys = Object.keys(dayMap);
-      if (filter) {
-        keys = keys.filter(k => k === filter);
-      }
+      let sortedDays = Object.keys(daysMap).sort().reverse();
 
-      keys.sort((a, b) => new Date(b) - new Date(a));
+      sortedDays.forEach(day => {
+        if(dateFilter && day !== dateFilter) return;
 
-      if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#9ca3af; padding:15px;">No transactions recorded for selected date.</td></tr>';
-        return;
-      }
+        let sales = daysMap[day].sales;
+        let purchases = daysMap[day].purchases;
+        let profit = sales - daysMap[day].cogs;
+        let marginPct = sales > 0 ? (profit / sales) * 100 : 0;
 
-      keys.forEach(isoDate => {
-        let data = dayMap[isoDate];
-        let parts = isoDate.split('-');
-        let displayDate = (parts.length === 3) ? `${parts[2]}/${parts[1]}/${parts[0]}` : isoDate;
-
-        tbody.innerHTML += `
-          <tr>
-            <td><b>${displayDate}</b></td>
-            <td class="text-green">₹${data.sales.toFixed(2)}</td>
-            <td class="text-red">₹${data.purchases.toFixed(2)}</td>
-            <td class="${data.profit >= 0 ? 'text-green' : 'text-red'}"><b>₹${data.profit.toFixed(2)}</b></td>
-          </tr>
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${day}</b></td>
+          <td class="text-green">₹${sales.toFixed(2)}</td>
+          <td class="text-red">₹${purchases.toFixed(2)}</td>
+          <td class="${profit >= 0 ? 'text-green' : 'text-red'}"><b>₹${profit.toFixed(2)}</b></td>
+          <td><b>${marginPct.toFixed(2)}%</b></td>
         `;
+        tbody.appendChild(tr);
       });
-    }
-
-    function calculatePartyBalance(partyName) {
-      let totalSales = 0;
-      let totalPurchases = 0;
-      let totalReceived = 0;
-      let totalPaidOut = 0;
-
-      let logs = allLogs.filter(l => l.party && l.party.toLowerCase() === partyName.toLowerCase());
-      let pymts = allPayments.filter(p => p.party && p.party.toLowerCase() === partyName.toLowerCase());
-
-      logs.forEach(item => {
-        if(item.type === 'SALE') {
-          totalSales += item.total;
-          totalReceived += item.paid;
-        } else if(item.type === 'SALE_RETURN') {
-          totalSales -= item.total;
-          totalReceived -= item.paid;
-        } else if(item.type === 'PURCHASE') {
-          totalPurchases += item.total;
-          totalPaidOut += item.paid;
-        } else if(item.type === 'PURCHASE_RETURN') {
-          totalPurchases -= item.total;
-          totalPaidOut -= item.paid;
-        }
-      });
-
-      pymts.forEach(item => {
-        let isReceived = (item.partyType === 'Customer' || item.direction === 'RECEIVED');
-        if(isReceived) totalReceived += item.amount;
-        else totalPaidOut += item.amount;
-      });
-
-      return (totalSales - totalReceived) - (totalPurchases - totalPaidOut);
     }
 
     function renderCashFlow() {
       let cashIn = 0;
       let cashOut = 0;
 
-      allLogs.forEach(log => {
-        let paid = log.paid || 0;
-        if(log.type === 'SALE') cashIn += paid;
-        if(log.type === 'SALE_RETURN') cashOut += paid;
-        if(log.type === 'PURCHASE') cashOut += paid;
-        if(log.type === 'PURCHASE_RETURN') cashIn += paid;
+      allLogs.forEach(l => {
+        let paid = parseFloat(l.paidAmount) || 0;
+        if(l.type === 'SALE' || l.type === 'PURCHASE_RETURN') cashIn += paid;
+        if(l.type === 'PURCHASE' || l.type === 'SALE_RETURN') cashOut += paid;
       });
 
       allPayments.forEach(p => {
-        let isReceived = (p.partyType === 'Customer' || p.direction === 'RECEIVED');
-        if(isReceived) cashIn += (p.amount || 0);
-        else cashOut += (p.amount || 0);
+        let amt = parseFloat(p.amount) || 0;
+        if(p.direction === 'RECEIVED') cashIn += amt;
+        if(p.direction === 'PAID') cashOut += amt;
       });
 
-      let netCash = cashIn - cashOut;
+      document.getElementById('cf-in').textContent = '₹' + cashIn.toFixed(2);
+      document.getElementById('cf-out').textContent = '₹' + cashOut.toFixed(2);
 
-      document.getElementById('cf-in').textContent = `₹${cashIn.toFixed(2)}`;
-      document.getElementById('cf-out').textContent = `₹${cashOut.toFixed(2)}`;
-      document.getElementById('cf-net').textContent = `₹${netCash.toFixed(2)}`;
+      let netCf = cashIn - cashOut;
+      let netEl = document.getElementById('cf-net');
+      netEl.textContent = '₹' + netCf.toFixed(2);
+      netEl.className = netCf >= 0 ? 'stat-val text-green' : 'stat-val text-red';
 
-      let totalReceivables = 0;
-      let totalPayables = 0;
+      let totalPendingRec = 0;
+      let totalPendingPay = 0;
 
-      allPartiesList.forEach(p => {
-        let bal = calculatePartyBalance(p);
-        if(bal > 0) totalReceivables += bal;
-        if(bal < 0) totalPayables += Math.abs(bal);
+      allPartiesList.forEach(party => {
+        let isCust = customersList.some(c => c.toLowerCase() === party.toLowerCase());
+        let partyType = isCust ? 'Customer' : 'Vendor';
+        let metrics = calculatePartyMetrics(party, partyType);
+
+        if (partyType === 'Customer') {
+          if (metrics.netBalance > 0) totalPendingRec += metrics.netBalance;
+          else totalPendingPay += Math.abs(metrics.netBalance);
+        } else {
+          if (metrics.netBalance > 0) totalPendingPay += metrics.netBalance;
+          else totalPendingRec += Math.abs(metrics.netBalance);
+        }
       });
 
-      document.getElementById('cf-pending-rec').textContent = `₹${totalReceivables.toFixed(2)}`;
-      document.getElementById('cf-pending-pay').textContent = `₹${totalPayables.toFixed(2)}`;
+      document.getElementById('cf-pending-rec').textContent = '₹' + totalPendingRec.toFixed(2);
+      document.getElementById('cf-pending-pay').textContent = '₹' + totalPendingPay.toFixed(2);
     }
 
     function renderRestockAndFast() {
-      let itemSalesMap = {};
+      let salesMap = {};
 
-      allLogs.forEach(log => {
-        let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate }];
-        items.forEach(i => {
-          let name = i.name;
-          if(!name) return;
-          if(!itemSalesMap[name]) itemSalesMap[name] = { qty: 0, val: 0 };
-
-          let q = parseInt(i.qty) || 0;
-          let r = parseFloat(i.rate) || 0;
-
-          if(log.type === 'SALE') {
-            itemSalesMap[name].qty += q;
-            itemSalesMap[name].val += (i.total || (q * r));
-          } else if(log.type === 'SALE_RETURN') {
-            itemSalesMap[name].qty -= q;
-            itemSalesMap[name].val -= (i.total || (q * r));
-          }
-        });
+      allLogs.forEach(l => {
+        if(l.type === 'SALE') {
+          (l.items || []).forEach(i => {
+            if(!salesMap[i.name]) salesMap[i.name] = { qty: 0, val: 0 };
+            salesMap[i.name].qty += (parseInt(i.qty) || 0);
+            salesMap[i.name].val += ((parseInt(i.qty) || 0) * (parseFloat(i.rate) || 0));
+          });
+        }
       });
 
-      let sortedFast = Object.keys(itemSalesMap)
-        .map(k => ({ name: k, ...itemSalesMap[k] }))
-        .sort((a,b) => b.qty - a.qty)
-        .slice(0, 5);
+      let sortedSales = Object.keys(salesMap).map(k => ({ name: k, ...salesMap[k] })).sort((a,b) => b.qty - a.qty).slice(0, 5);
 
       let fastTbody = document.getElementById('fast-moving-table-body');
       fastTbody.innerHTML = '';
-      sortedFast.forEach(item => {
-        fastTbody.innerHTML += `
-          <tr>
-            <td><b>${item.name}</b></td>
-            <td>${item.qty}</td>
-            <td>₹${item.val.toFixed(2)}</td>
-          </tr>
-        `;
+      sortedSales.forEach(item => {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td><b>${item.name}</b></td><td>${item.qty}</td><td>₹${item.val.toFixed(2)}</td>`;
+        fastTbody.appendChild(tr);
       });
 
       let restockTbody = document.getElementById('restock-table-body');
       restockTbody.innerHTML = '';
 
       allItems.forEach(item => {
-        let stock = calculateStockForItem(item.name);
-        if(stock.closing <= 3) {
-          restockTbody.innerHTML += `
-            <tr>
-              <td><b>${item.name}</b></td>
-              <td>${item.category || 'General'}</td>
-              <td class="text-red"><b>${stock.closing}</b></td>
-            </tr>
-          `;
+        let closing = calculateStockForItem(item.name).closing;
+        if(closing <= 3) {
+          let tr = document.createElement('tr');
+          tr.innerHTML = `<td><b>${item.name}</b></td><td>${item.category || 'General'}</td><td class="text-red"><b>${closing}</b></td>`;
+          restockTbody.appendChild(tr);
         }
       });
     }
 
     function renderDuesSummary() {
       let recTbody = document.getElementById('receivables-table-body');
-      recTbody.innerHTML = '';
-
       let payTbody = document.getElementById('payables-table-body');
+
+      recTbody.innerHTML = '';
       payTbody.innerHTML = '';
 
       allPartiesList.forEach(party => {
-        let bal = calculatePartyBalance(party);
-        if(bal > 0) {
-          recTbody.innerHTML += `<tr><td><b>${party}</b></td><td class="text-green"><b>₹${bal.toFixed(2)}</b></td></tr>`;
-        } else if(bal < 0) {
-          payTbody.innerHTML += `<tr><td><b>${party}</b></td><td class="text-red"><b>₹${Math.abs(bal).toFixed(2)}</b></td></tr>`;
+        let isCust = customersList.some(c => c.toLowerCase() === party.toLowerCase());
+        let partyType = isCust ? 'Customer' : 'Vendor';
+        let metrics = calculatePartyMetrics(party, partyType);
+
+        if (partyType === 'Customer') {
+          if (metrics.netBalance > 0) { // Customer owes you money (Receivable)
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td><b>${party}</b></td><td>Customer</td><td class="text-green"><b>₹${metrics.netBalance.toFixed(2)}</b></td>`;
+            recTbody.appendChild(tr);
+          } else if (metrics.netBalance < 0) { // You owe customer money (Payable)
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td><b>${party}</b></td><td>Customer</td><td class="text-red"><b>₹${Math.abs(metrics.netBalance).toFixed(2)}</b></td>`;
+            payTbody.appendChild(tr);
+          }
+        } else { // Vendor
+          if (metrics.netBalance > 0) { // You owe vendor money (Payable)
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td><b>${party}</b></td><td>Vendor</td><td class="text-red"><b>₹${metrics.netBalance.toFixed(2)}</b></td>`;
+            payTbody.appendChild(tr);
+          } else if (metrics.netBalance < 0) { // Vendor owes you money (Receivable)
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td><b>${party}</b></td><td>Vendor</td><td class="text-green"><b>₹${Math.abs(metrics.netBalance).toFixed(2)}</b></td>`;
+            recTbody.appendChild(tr);
+          }
         }
       });
+    }
+
+    function openEditModal(logId) {
+      let log = allLogs.find(l => l.id === logId);
+      if(!log) return;
+
+      document.getElementById('edit-log-id').value = log.id;
+      document.getElementById('edit-party').value = log.party || '';
+      document.getElementById('edit-paid').value = log.paidAmount || 0;
+      document.getElementById('edit-discount').value = log.discount || 0;
+
+      let miscWrap = document.getElementById('edit-misc-wrap');
+      if(log.type.includes('PURCHASE')) {
+        miscWrap.classList.remove('hidden');
+        document.getElementById('edit-misc').value = log.miscCharges || 0;
+      } else {
+        miscWrap.classList.add('hidden');
+      }
+
+      let container = document.getElementById('edit-items-container');
+      container.innerHTML = '';
+
+      (log.items || []).forEach((item, idx) => {
+        let div = document.createElement('div');
+        div.style.cssText = "display:flex; gap:6px; margin-top:6px; align-items:center;";
+        div.innerHTML = `
+          <input type="text" value="${item.name}" id="edit-item-name-${idx}" style="flex:2;" readonly>
+          <input type="number" value="${item.qty}" id="edit-item-qty-${idx}" style="flex:1;">
+          <input type="number" value="${item.rate || item.cost}" id="edit-item-rate-${idx}" style="flex:1;">
+        `;
+        container.appendChild(div);
+      });
+
+      document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    function saveEditedInvoice() {
+      let logId = document.getElementById('edit-log-id').value;
+      let log = allLogs.find(l => l.id === logId);
+      if(!log) return;
+
+      let party = document.getElementById('edit-party').value.trim();
+      let paid = parseFloat(document.getElementById('edit-paid').value) || 0;
+      let discount = parseFloat(document.getElementById('edit-discount').value) || 0;
+      let misc = parseFloat(document.getElementById('edit-misc').value) || 0;
+
+      party = validatePartyName(party);
+      if(!party) {
+        alert('Please specify a valid party name.');
+        return;
+      }
+
+      let items = (log.items || []).map((it, idx) => {
+        let q = parseInt(document.getElementById(`edit-item-qty-${idx}`).value) || 1;
+        let r = parseFloat(document.getElementById(`edit-item-rate-${idx}`).value) || 0;
+        return {
+          ...it,
+          qty: q,
+          rate: log.type.includes('SALE') ? r : it.rate,
+          cost: log.type.includes('PURCHASE') ? r : it.cost
+        };
+      });
+
+      let grandTotal = items.reduce((acc, i) => acc + (i.qty * (i.rate || i.cost)), 0);
+      if(log.type.includes('PURCHASE')) grandTotal += misc;
+
+      let updateData = {
+        party: party,
+        paidAmount: paid,
+        discount: discount,
+        grandTotal: grandTotal,
+        items: items
+      };
+
+      if(log.type.includes('PURCHASE')) updateData.miscCharges = misc;
+
+      rtdb.ref('logs/' + logId).update(updateData).then(() => {
+        alert('Entry updated successfully!');
+        closeEditModal();
+      });
+    }
+
+    function openEditPaymentModal(payId) {
+      let pay = allPayments.find(p => p.id === payId);
+      if(!pay) return;
+
+      document.getElementById('edit-pay-id').value = pay.id;
+      document.getElementById('edit-pay-party').value = pay.party;
+      document.getElementById('edit-pay-direction').value = pay.direction;
+      document.getElementById('edit-pay-amount').value = pay.amount;
+
+      document.getElementById('edit-payment-modal').classList.remove('hidden');
+    }
+
+    function closeEditPaymentModal() {
+      document.getElementById('edit-payment-modal').classList.add('hidden');
+    }
+
+    function saveEditedPayment() {
+      let payId = document.getElementById('edit-pay-id').value;
+      let direction = document.getElementById('edit-pay-direction').value;
+      let amount = parseFloat(document.getElementById('edit-pay-amount').value) || 0;
+
+      if(amount <= 0) {
+        alert('Please enter a valid amount.');
+        return;
+      }
+
+      rtdb.ref('payments/' + payId).update({
+        direction: direction,
+        amount: amount
+      }).then(() => {
+        alert('Payment entry updated!');
+        closeEditPaymentModal();
+      });
+    }
+
+    function deleteEntry(id, isLog) {
+      if(confirm('Are you sure you want to delete this record?')) {
+        let path = isLog ? 'logs/' + id : 'payments/' + id;
+        rtdb.ref(path).remove();
+      }
     }
   </script>
 </body>
