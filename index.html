@@ -249,6 +249,7 @@
         <h3>Party Ledger & Global Payments</h3>
         <label>Select Party Type</label>
         <select id="acc-type" onchange="renderPartyDropdown()">
+          <option value="All">All Parties (Unified Ledger)</option>
           <option value="Customer">Customers</option>
           <option value="Vendor">Vendors / Suppliers</option>
         </select>
@@ -258,28 +259,35 @@
 
         <div class="stat-card" style="margin-top:15px; background: #f0fdf4;">
           <div>Net Balance Due</div>
-          <div class="stat-val text-red" id="party-balance">₹0.00</div>
+          <div class="stat-val" id="party-balance">₹0.00</div>
+          <small id="party-balance-type" style="font-weight:bold; font-size:0.75rem;"></small>
         </div>
 
         <div class="summary-box">
-          <b>Summary Totals for Selected Party:</b>
+          <b>Unified Summary for Selected Party:</b>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; font-size: 0.8rem;">
-            <div>Total Sales/Purchases: <b id="party-tot-sales-purch">₹0.00</b></div>
-            <div>Total Paid/Received: <b id="party-tot-paid-rec">₹0.00</b></div>
+            <div>Total Sales/Invoices: <b id="party-tot-sales">₹0.00</b></div>
+            <div>Total Purchases/Bills: <b id="party-tot-purchases">₹0.00</b></div>
+            <div>Payments Received: <b id="party-tot-rec">₹0.00</b></div>
+            <div>Payments Out/Given: <b id="party-tot-paid">₹0.00</b></div>
           </div>
         </div>
 
         <div style="background: #eef2ff; padding: 10px; border-radius: 6px; margin-top: 12px;">
           <h4 style="font-size: 0.85rem; color: #374151;">Record Direct Payment / Adjustment</h4>
           <div style="display: flex; gap: 8px; margin-top: 6px;">
-            <input type="number" id="party-adjust-amount" placeholder="Amount (₹)">
-            <button class="btn btn-blue" style="width: auto; padding: 0 15px;" onclick="savePartyPayment()">Record Payment</button>
+            <select id="party-adjust-type" style="flex:1;">
+              <option value="RECEIVED">Cash Received (In)</option>
+              <option value="PAID">Cash Paid (Out)</option>
+            </select>
+            <input type="number" id="party-adjust-amount" placeholder="Amount (₹)" style="flex:1;">
+            <button class="btn btn-blue" style="width: auto; padding: 0 15px;" onclick="savePartyPayment()">Record</button>
           </div>
         </div>
 
         <table id="party-table" style="margin-top:15px;">
           <thead>
-            <tr><th>Date</th><th>Description / Inv</th><th>Amount</th><th>Paid / Adj</th><th>Actions</th></tr>
+            <tr><th>Date</th><th>Type</th><th>Description / Inv</th><th>Amount</th><th>Paid / Adj</th><th>Actions</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -458,20 +466,20 @@
     <!-- RECEIVABLES AND PAYABLES SUMMARY -->
     <div id="tab-dues" class="tab-content hidden">
       <div class="card">
-        <h3>📥 Receivables Summary (Customers Owing Money)</h3>
+        <h3>📥 Receivables Summary (Parties Owing You Money)</h3>
         <table>
           <thead>
-            <tr><th>Customer Name</th><th>Pending Balance (₹)</th></tr>
+            <tr><th>Party Name</th><th>Net Receivable Balance (₹)</th></tr>
           </thead>
           <tbody id="receivables-table-body"></tbody>
         </table>
       </div>
 
       <div class="card">
-        <h3>📤 Payables Summary (Amount You Owe Vendors)</h3>
+        <h3>📤 Payables Summary (Net Amount You Owe Parties)</h3>
         <table>
           <thead>
-            <tr><th>Vendor Name</th><th>Pending Balance (₹)</th></tr>
+            <tr><th>Party Name</th><th>Net Payable Balance (₹)</th></tr>
           </thead>
           <tbody id="payables-table-body"></tbody>
         </table>
@@ -533,6 +541,12 @@
       <label>Party Name</label>
       <input type="text" id="edit-pay-party" readonly>
 
+      <label>Payment Direction</label>
+      <select id="edit-pay-direction">
+        <option value="RECEIVED">Cash Received (In)</option>
+        <option value="PAID">Cash Paid (Out)</option>
+      </select>
+
       <label>Amount (₹)</label>
       <input type="number" id="edit-pay-amount">
 
@@ -562,13 +576,13 @@
     let allPayments = [];
     let customersList = [];
     let suppliersList = [];
+    let allPartiesList = [];
 
-    // Enhanced Helper: Reliable Effective Cost Retrieval with Proportional Freight Allocation
+    // Landed cost calculator with proportional freight allocation
     function getItemPurchaseCost(itemName) {
       if (!itemName) return 0;
       let cleanName = itemName.trim().toLowerCase();
 
-      // 1. Scan Purchase Logs backwards for real transactional landed cost (base cost + allocated freight)
       for (let i = allLogs.length - 1; i >= 0; i--) {
         let log = allLogs[i];
         if (log.type === 'PURCHASE' && log.items && log.items.length > 0) {
@@ -578,7 +592,6 @@
             let qty = parseInt(matchedItem.qty) || 1;
             let misc = parseFloat(log.miscCharges || 0);
             
-            // Calculate proportional freight allocation if not already allocated directly on item
             let freightPerUnit = 0;
             if (misc > 0) {
               let itemsSubtotal = log.items.reduce((acc, current) => {
@@ -600,7 +613,6 @@
         }
       }
 
-      // 2. Search Catalog fallback
       let catalogItem = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
       if (catalogItem && catalogItem.purchaseRate !== undefined && catalogItem.purchaseRate !== null && parseFloat(catalogItem.purchaseRate) > 0) {
         return parseFloat(catalogItem.purchaseRate);
@@ -609,7 +621,7 @@
       return 0;
     }
 
-    // Realtime Listeners
+    // Realtime Database Listeners
     rtdb.ref("items").on("value", snapshot => {
       let data = snapshot.val() || {};
       allItems = Object.keys(data).map(key => ({ key, ...data[key] }));
@@ -661,10 +673,15 @@
     function extractAndRenderParties() {
       customersList = [];
       suppliersList = [];
+      allPartiesList = [];
 
       allLogs.forEach(l => {
         if(!l.party) return;
         let partyTrimmed = l.party.trim();
+        if(!allPartiesList.some(p => p.toLowerCase() === partyTrimmed.toLowerCase())) {
+          allPartiesList.push(partyTrimmed);
+        }
+
         if(l.type === 'SALE' || l.type === 'SALE_RETURN') {
           if(!customersList.some(c => c.toLowerCase() === partyTrimmed.toLowerCase())) {
             customersList.push(partyTrimmed);
@@ -679,6 +696,9 @@
       allPayments.forEach(p => {
         if(!p.party) return;
         let partyTrimmed = p.party.trim();
+        if(!allPartiesList.some(party => party.toLowerCase() === partyTrimmed.toLowerCase())) {
+          allPartiesList.push(partyTrimmed);
+        }
         if(p.partyType === 'Customer') {
           if(!customersList.some(c => c.toLowerCase() === partyTrimmed.toLowerCase())) customersList.push(partyTrimmed);
         } else {
@@ -717,7 +737,7 @@
     function validatePartyName(name, existingList) {
       let trimmed = name.trim();
       if(!trimmed) return null;
-      let existingMatch = existingList.find(item => item.toLowerCase() === trimmed.toLowerCase());
+      let existingMatch = allPartiesList.find(item => item.toLowerCase() === trimmed.toLowerCase());
       return existingMatch || trimmed;
     }
 
@@ -894,7 +914,6 @@
       let grandTotal = itemsTotal + misc;
       let type = isReturn ? 'PURCHASE_RETURN' : 'PURCHASE';
 
-      // Proportional freight share computation per unit
       for (let item of purchaseCart) {
         let allocatedFreightPerUnit = 0;
         if (misc > 0 && itemsTotal > 0) {
@@ -921,7 +940,6 @@
         }
       }
 
-      // 2. Save log entry
       await rtdb.ref("logs").push({
         invNum: invNum,
         type: type,
@@ -973,9 +991,13 @@
       let type = document.getElementById('acc-type').value;
       let select = document.getElementById('acc-party');
       select.innerHTML = '';
-      let list = (type === 'Customer') ? customersList : suppliersList;
+      
+      let list = [];
+      if(type === 'Customer') list = customersList;
+      else if(type === 'Vendor') list = suppliersList;
+      else list = allPartiesList;
 
-      list.forEach(p => {
+      list.sort().forEach(p => {
         let opt = document.createElement('option');
         opt.value = p;
         opt.textContent = p;
@@ -985,6 +1007,7 @@
       renderPartyStatement();
     }
 
+    // Unified Party Statement and Ledger Calculator
     function renderPartyStatement() {
       let party = document.getElementById('acc-party').value;
       let tbody = document.querySelector('#party-table tbody');
@@ -992,13 +1015,18 @@
 
       if(!party) {
         document.getElementById('party-balance').textContent = "₹0.00";
-        document.getElementById('party-tot-sales-purch').textContent = "₹0.00";
-        document.getElementById('party-tot-paid-rec').textContent = "₹0.00";
+        document.getElementById('party-balance-type').textContent = "";
+        document.getElementById('party-tot-sales').textContent = "₹0.00";
+        document.getElementById('party-tot-purchases').textContent = "₹0.00";
+        document.getElementById('party-tot-rec').textContent = "₹0.00";
+        document.getElementById('party-tot-paid').textContent = "₹0.00";
         return;
       }
 
-      let totalBill = 0;
-      let totalPaid = 0;
+      let totalSales = 0;
+      let totalPurchases = 0;
+      let totalReceived = 0;
+      let totalPaidOut = 0;
 
       let logs = allLogs.filter(l => l.party && l.party.toLowerCase() === party.toLowerCase());
       let pymts = allPayments.filter(p => p.party && p.party.toLowerCase() === party.toLowerCase());
@@ -1010,7 +1038,7 @@
           id: l.id,
           source: 'LOG',
           date: l.date,
-          desc: `${l.type} - ${l.invNum}`,
+          desc: `${l.invNum}`,
           amount: l.total,
           paid: l.paid,
           type: l.type
@@ -1018,6 +1046,7 @@
       });
 
       pymts.forEach(p => {
+        let isReceived = (p.partyType === 'Customer' || p.direction === 'RECEIVED');
         combined.push({
           id: p.id,
           source: 'PAYMENT',
@@ -1025,7 +1054,7 @@
           desc: `Direct Payment / Adjustment`,
           amount: 0,
           paid: p.amount,
-          type: 'PAYMENT'
+          type: isReceived ? 'PAYMENT_REC' : 'PAYMENT_PAID'
         });
       });
 
@@ -1035,6 +1064,10 @@
         let amtStr = item.amount ? `₹${item.amount.toFixed(2)}` : '-';
         let paidStr = item.paid ? `₹${item.paid.toFixed(2)}` : '-';
         
+        let badgeClass = 'badge-sale';
+        if(item.type === 'PURCHASE') badgeClass = 'badge-purchase';
+        if(item.type.includes('RETURN') || item.type.includes('PAYMENT')) badgeClass = 'badge-payment';
+
         let actions = '';
         if(item.source === 'PAYMENT') {
           actions = `<button class="btn-edit" onclick="openEditPaymentModal('${item.id}')">Edit</button><button class="btn-danger" onclick="deletePayment('${item.id}')">Del</button>`;
@@ -1045,6 +1078,7 @@
         tbody.innerHTML += `
           <tr>
             <td>${item.date}</td>
+            <td><span class="badge ${badgeClass}">${item.type}</span></td>
             <td>${item.desc}</td>
             <td>${amtStr}</td>
             <td>${paidStr}</td>
@@ -1052,33 +1086,65 @@
           </tr>
         `;
 
-        if(item.type === 'SALE' || item.type === 'PURCHASE') {
-          totalBill += item.amount;
-          totalPaid += item.paid;
-        } else if(item.type === 'SALE_RETURN' || item.type === 'PURCHASE_RETURN') {
-          totalBill -= item.amount;
-          totalPaid -= item.paid;
-        } else if(item.type === 'PAYMENT') {
-          totalPaid += item.paid;
+        if(item.type === 'SALE') {
+          totalSales += item.amount;
+          totalReceived += item.paid;
+        } else if(item.type === 'SALE_RETURN') {
+          totalSales -= item.amount;
+          totalReceived -= item.paid;
+        } else if(item.type === 'PURCHASE') {
+          totalPurchases += item.amount;
+          totalPaidOut += item.paid;
+        } else if(item.type === 'PURCHASE_RETURN') {
+          totalPurchases -= item.amount;
+          totalPaidOut -= item.paid;
+        } else if(item.type === 'PAYMENT_REC') {
+          totalReceived += item.paid;
+        } else if(item.type === 'PAYMENT_PAID') {
+          totalPaidOut += item.paid;
         }
       });
 
-      let netDue = totalBill - totalPaid;
-      document.getElementById('party-balance').textContent = `₹${netDue.toFixed(2)}`;
-      document.getElementById('party-tot-sales-purch').textContent = `₹${totalBill.toFixed(2)}`;
-      document.getElementById('party-tot-paid-rec').textContent = `₹${totalPaid.toFixed(2)}`;
+      // Unified Formula: Net Due = (Sales - Receipts) - (Purchases - Payments Out)
+      let netReceivable = (totalSales - totalReceived) - (totalPurchases - totalPaidOut);
+
+      let balanceEl = document.getElementById('party-balance');
+      let balanceTypeEl = document.getElementById('party-balance-type');
+
+      if(netReceivable > 0) {
+        balanceEl.className = "stat-val text-green";
+        balanceEl.textContent = `₹${netReceivable.toFixed(2)}`;
+        balanceTypeEl.textContent = "(Receivable - Customer owes you)";
+        balanceTypeEl.style.color = "#16a34a";
+      } else if(netReceivable < 0) {
+        balanceEl.className = "stat-val text-red";
+        balanceEl.textContent = `₹${Math.abs(netReceivable).toFixed(2)}`;
+        balanceTypeEl.textContent = "(Payable - You owe customer/vendor)";
+        balanceTypeEl.style.color = "#dc2626";
+      } else {
+        balanceEl.className = "stat-val text-blue";
+        balanceEl.textContent = "₹0.00";
+        balanceTypeEl.textContent = "(Settled / Zero Balance)";
+        balanceTypeEl.style.color = "#2563eb";
+      }
+
+      document.getElementById('party-tot-sales').textContent = `₹${totalSales.toFixed(2)}`;
+      document.getElementById('party-tot-purchases').textContent = `₹${totalPurchases.toFixed(2)}`;
+      document.getElementById('party-tot-rec').textContent = `₹${totalReceived.toFixed(2)}`;
+      document.getElementById('party-tot-paid').textContent = `₹${totalPaidOut.toFixed(2)}`;
     }
 
     async function savePartyPayment() {
       let party = document.getElementById('acc-party').value;
-      let type = document.getElementById('acc-type').value;
+      let dir = document.getElementById('party-adjust-type').value;
       let amt = parseFloat(document.getElementById('party-adjust-amount').value);
 
       if(!party || !amt) return alert("Select a party and enter amount.");
 
       await rtdb.ref("payments").push({
         party: party,
-        partyType: type,
+        partyType: (dir === 'RECEIVED' ? 'Customer' : 'Vendor'),
+        direction: dir,
         amount: amt,
         date: new Date().toLocaleDateString('en-CA')
       });
@@ -1092,6 +1158,7 @@
       if(!p) return;
       document.getElementById('edit-pay-id').value = id;
       document.getElementById('edit-pay-party').value = p.party;
+      document.getElementById('edit-pay-direction').value = p.direction || (p.partyType === 'Customer' ? 'RECEIVED' : 'PAID');
       document.getElementById('edit-pay-amount').value = p.amount;
       document.getElementById('edit-payment-modal').classList.remove('hidden');
     }
@@ -1103,8 +1170,13 @@
     async function saveEditedPayment() {
       let id = document.getElementById('edit-pay-id').value;
       let amt = parseFloat(document.getElementById('edit-pay-amount').value) || 0;
+      let dir = document.getElementById('edit-pay-direction').value;
 
-      await rtdb.ref("payments/" + id).update({ amount: amt });
+      await rtdb.ref("payments/" + id).update({ 
+        amount: amt,
+        direction: dir,
+        partyType: (dir === 'RECEIVED' ? 'Customer' : 'Vendor')
+      });
       closeEditPaymentModal();
       alert("Payment updated!");
     }
@@ -1347,7 +1419,6 @@
       document.getElementById('prof-cogs').textContent = `₹${totalCOGS.toFixed(2)}`;
       document.getElementById('prof-gross').textContent = `₹${grossProfit.toFixed(2)}`;
 
-      // Category Profitability Table
       let catProfTbody = document.querySelector('#category-profitability-table tbody');
       catProfTbody.innerHTML = '';
       let categories = Array.from(new Set([...Object.keys(catSalesMap), ...allItems.map(i => i.category || 'General')]));
@@ -1366,7 +1437,6 @@
         `;
       });
 
-      // Category Stock Summary
       allItems.forEach(i => {
         let cat = i.category || 'General';
         let stock = calculateStockForItem(i.name);
@@ -1498,6 +1568,40 @@
       });
     }
 
+    function calculatePartyBalance(partyName) {
+      let totalSales = 0;
+      let totalPurchases = 0;
+      let totalReceived = 0;
+      let totalPaidOut = 0;
+
+      let logs = allLogs.filter(l => l.party && l.party.toLowerCase() === partyName.toLowerCase());
+      let pymts = allPayments.filter(p => p.party && p.party.toLowerCase() === partyName.toLowerCase());
+
+      logs.forEach(item => {
+        if(item.type === 'SALE') {
+          totalSales += item.total;
+          totalReceived += item.paid;
+        } else if(item.type === 'SALE_RETURN') {
+          totalSales -= item.total;
+          totalReceived -= item.paid;
+        } else if(item.type === 'PURCHASE') {
+          totalPurchases += item.total;
+          totalPaidOut += item.paid;
+        } else if(item.type === 'PURCHASE_RETURN') {
+          totalPurchases -= item.total;
+          totalPaidOut -= item.paid;
+        }
+      });
+
+      pymts.forEach(item => {
+        let isReceived = (item.partyType === 'Customer' || item.direction === 'RECEIVED');
+        if(isReceived) totalReceived += item.amount;
+        else totalPaidOut += item.amount;
+      });
+
+      return (totalSales - totalReceived) - (totalPurchases - totalPaidOut);
+    }
+
     function renderCashFlow() {
       let cashIn = 0;
       let cashOut = 0;
@@ -1511,8 +1615,9 @@
       });
 
       allPayments.forEach(p => {
-        if(p.partyType === 'Customer') cashIn += (p.amount || 0);
-        if(p.partyType === 'Vendor') cashOut += (p.amount || 0);
+        let isReceived = (p.partyType === 'Customer' || p.direction === 'RECEIVED');
+        if(isReceived) cashIn += (p.amount || 0);
+        else cashOut += (p.amount || 0);
       });
 
       let netCash = cashIn - cashOut;
@@ -1524,42 +1629,14 @@
       let totalReceivables = 0;
       let totalPayables = 0;
 
-      customersList.forEach(c => {
-        let bal = calculatePartyBalance(c, 'Customer');
+      allPartiesList.forEach(p => {
+        let bal = calculatePartyBalance(p);
         if(bal > 0) totalReceivables += bal;
-      });
-
-      suppliersList.forEach(s => {
-        let bal = calculatePartyBalance(s, 'Vendor');
-        if(bal > 0) totalPayables += bal;
+        if(bal < 0) totalPayables += Math.abs(bal);
       });
 
       document.getElementById('cf-pending-rec').textContent = `₹${totalReceivables.toFixed(2)}`;
       document.getElementById('cf-pending-pay').textContent = `₹${totalPayables.toFixed(2)}`;
-    }
-
-    function calculatePartyBalance(partyName) {
-      let totalBill = 0;
-      let totalPaid = 0;
-
-      let logs = allLogs.filter(l => l.party && l.party.toLowerCase() === partyName.toLowerCase());
-      let pymts = allPayments.filter(p => p.party && p.party.toLowerCase() === partyName.toLowerCase());
-
-      logs.forEach(item => {
-        if(item.type === 'SALE' || item.type === 'PURCHASE') {
-          totalBill += item.total;
-          totalPaid += item.paid;
-        } else if(item.type === 'SALE_RETURN' || item.type === 'PURCHASE_RETURN') {
-          totalBill -= item.total;
-          totalPaid -= item.paid;
-        }
-      });
-
-      pymts.forEach(item => {
-        totalPaid += item.amount;
-      });
-
-      return totalBill - totalPaid;
     }
 
     function renderRestockAndFast() {
@@ -1622,19 +1699,16 @@
     function renderDuesSummary() {
       let recTbody = document.getElementById('receivables-table-body');
       recTbody.innerHTML = '';
-      customersList.forEach(c => {
-        let bal = calculatePartyBalance(c, 'Customer');
-        if(bal > 0) {
-          recTbody.innerHTML += `<tr><td><b>${c}</b></td><td class="text-green"><b>₹${bal.toFixed(2)}</b></td></tr>`;
-        }
-      });
 
       let payTbody = document.getElementById('payables-table-body');
       payTbody.innerHTML = '';
-      suppliersList.forEach(s => {
-        let bal = calculatePartyBalance(s, 'Vendor');
+
+      allPartiesList.forEach(party => {
+        let bal = calculatePartyBalance(party);
         if(bal > 0) {
-          payTbody.innerHTML += `<tr><td><b>${s}</b></td><td class="text-red"><b>₹${bal.toFixed(2)}</b></td></tr>`;
+          recTbody.innerHTML += `<tr><td><b>${party}</b></td><td class="text-green"><b>₹${bal.toFixed(2)}</b></td></tr>`;
+        } else if(bal < 0) {
+          payTbody.innerHTML += `<tr><td><b>${party}</b></td><td class="text-red"><b>₹${Math.abs(bal).toFixed(2)}</b></td></tr>`;
         }
       });
     }
