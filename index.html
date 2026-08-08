@@ -17,10 +17,10 @@
     .sync-status { background: #dcfce7; color: #15803d; text-align: center; padding: 4px; font-size: 0.75rem; font-weight: bold; }
 
     .nav-tabs { display: flex; background: white; border-bottom: 1px solid #e5e7eb; position: sticky; top: 51px; z-index: 9; overflow-x: auto; }
-    .tab-btn { flex: 1; min-width: 80px; padding: 12px 5px; text-align: center; border: none; background: none; font-weight: 600; font-size: 0.8rem; color: #6b7280; cursor: pointer; white-space: nowrap; }
+    .tab-btn { flex: 1; min-width: 90px; padding: 12px 5px; text-align: center; border: none; background: none; font-weight: 600; font-size: 0.8rem; color: #6b7280; cursor: pointer; white-space: nowrap; }
     .tab-btn.active { color: #2563eb; border-bottom: 3px solid #2563eb; }
 
-    .container { padding: 15px; max-width: 700px; margin: 0 auto; }
+    .container { padding: 15px; max-width: 800px; margin: 0 auto; }
     .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; }
 
     label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; margin-bottom: 4px; color: #374151; }
@@ -35,12 +35,13 @@
     .btn-edit { background: #d97706; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; margin-right: 4px; }
     .btn-view { background: #2563eb; color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; margin-right: 4px; }
 
-    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 15px; }
     .stat-card { background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-    .stat-val { font-size: 1.2rem; font-weight: bold; margin-top: 5px; }
+    .stat-val { font-size: 1.1rem; font-weight: bold; margin-top: 5px; }
     .text-green { color: #16a34a; }
     .text-red { color: #dc2626; }
     .text-blue { color: #2563eb; }
+    .text-yellow { color: #d97706; }
 
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8rem; }
     th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #e5e7eb; }
@@ -52,7 +53,7 @@
     .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .badge-sale { background: #dcfce7; color: #15803d; }
     .badge-purchase { background: #fee2e2; color: #b91c1c; }
-    .badge-return { background: #fef3c7; color: #d97706; }
+    .badge-payment { background: #e0e7ff; color: #3730a3; }
 
     .checkbox-wrap { display: flex; align-items: center; gap: 8px; margin-top: 10px; background: #fffbe3; padding: 8px; border-radius: 6px; border: 1px solid #fde68a; }
     .checkbox-wrap input { width: auto; }
@@ -60,6 +61,9 @@
     /* Modal Overlay */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
     .modal-card { background: white; width: 90%; max-width: 550px; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 85vh; overflow-y: auto; }
+    
+    .item-subrow { background-color: #f8fafc; font-size: 0.75rem; color: #475569; }
+    .summary-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 6px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -73,7 +77,11 @@
     <button class="tab-btn" onclick="switchTab('lookup', this)">Directory</button>
     <button class="tab-btn" onclick="switchTab('accounts', this)">Ledger</button>
     <button class="tab-btn" onclick="switchTab('history', this)">Invoices</button>
-    <button class="tab-btn" onclick="switchTab('stock', this)">Stock Summary</button>
+    <button class="tab-btn" onclick="switchTab('stock', this)">Stock</button>
+    <button class="tab-btn" onclick="switchTab('daily', this)">Daily Trends</button>
+    <button class="tab-btn" onclick="switchTab('cashflow', this)">Cash Flow</button>
+    <button class="tab-btn" onclick="switchTab('restock', this)">Restock & Fast</button>
+    <button class="tab-btn" onclick="switchTab('dues', this)">Dues Summary</button>
   </div>
 
   <div class="container">
@@ -125,7 +133,7 @@
           <b>Cart Items:</b>
           <div id="s-cart-items"></div>
           <div style="text-align: right; margin-top: 8px; font-weight: bold;">
-            Grand Total: ₹<span id="s-grand-total">0</span>
+            Grand Total: ₹<span id="s-grand-total">0.00</span>
           </div>
         </div>
 
@@ -209,7 +217,7 @@
           <b>Invoice Items:</b>
           <div id="p-cart-items"></div>
           <div style="text-align: right; margin-top: 8px; font-weight: bold;">
-            Items Total: ₹<span id="p-sub-total">0</span> | Net Bill (+Misc): ₹<span id="p-grand-total">0</span>
+            Items Total: ₹<span id="p-sub-total">0.00</span> | Net Bill (+Misc): ₹<span id="p-grand-total">0.00</span>
           </div>
         </div>
 
@@ -253,7 +261,15 @@
 
         <div class="stat-card" style="margin-top:15px; background: #f0fdf4;">
           <div>Net Balance Due</div>
-          <div class="stat-val text-red" id="party-balance">₹0</div>
+          <div class="stat-val text-red" id="party-balance">₹0.00</div>
+        </div>
+
+        <div class="summary-box">
+          <b>Summary Totals for Selected Party:</b>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; font-size: 0.8rem;">
+            <div>Total Sales/Purchases: <b id="party-tot-sales-purch">₹0.00</b></div>
+            <div>Total Paid/Received: <b id="party-tot-paid-rec">₹0.00</b></div>
+          </div>
         </div>
 
         <div style="background: #eef2ff; padding: 10px; border-radius: 6px; margin-top: 12px;">
@@ -266,7 +282,7 @@
 
         <table id="party-table" style="margin-top:15px;">
           <thead>
-            <tr><th>Date</th><th>Description / Inv</th><th>Total</th><th>Paid / Adj</th></tr>
+            <tr><th>Date</th><th>Description / Inv</th><th>Amount</th><th>Paid / Adj</th><th>Actions</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -291,11 +307,11 @@
       <div class="stat-grid">
         <div class="stat-card">
           <div>Total Net Sales</div>
-          <div class="stat-val text-green" id="stat-sales">₹0</div>
+          <div class="stat-val text-green" id="stat-sales">₹0.00</div>
         </div>
         <div class="stat-card">
           <div>Total Net Purchases</div>
-          <div class="stat-val text-red" id="stat-purchases">₹0</div>
+          <div class="stat-val text-red" id="stat-purchases">₹0.00</div>
         </div>
       </div>
 
@@ -304,16 +320,16 @@
         <h3 style="color: #166534;">📈 Overall Business Profitability</h3>
         <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.9rem;">
           <span>Net Sales Revenue:</span>
-          <b id="prof-sales">₹0</b>
+          <b id="prof-sales">₹0.00</b>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.9rem;">
           <span>Cost of Goods Sold (COGS):</span>
-          <b id="prof-cogs">₹0</b>
+          <b id="prof-cogs">₹0.00</b>
         </div>
         <hr style="margin: 8px 0; border-top: 1px dashed #86efac;">
         <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: bold;">
           <span>Gross Profit:</span>
-          <span id="prof-gross" class="text-green">₹0</span>
+          <span id="prof-gross" class="text-green">₹0.00</span>
         </div>
       </div>
 
@@ -361,6 +377,110 @@
       </div>
     </div>
 
+    <!-- DAY WISE SALES / PURCHASE / PROFITABILITY -->
+    <div id="tab-daily" class="tab-content hidden">
+      <div class="card">
+        <h3>📅 Daily Trends & Performance</h3>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <div style="flex:1;">
+            <label>Filter Date</label>
+            <input type="date" id="daily-date-filter" onchange="renderDailyTrends()">
+          </div>
+          <div style="flex:1; display:flex; align-items:flex-end;">
+            <button class="btn btn-blue" onclick="document.getElementById('daily-date-filter').value=''; renderDailyTrends();">Show All Days</button>
+          </div>
+        </div>
+        
+        <table style="margin-top:15px;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Sales (₹)</th>
+              <th>Purchases (₹)</th>
+              <th>Est. Profit (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="daily-trends-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CASH FLOW SECTION -->
+    <div id="tab-cashflow" class="tab-content hidden">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div>Total Received (Cash In)</div>
+          <div class="stat-val text-green" id="cf-in">₹0.00</div>
+        </div>
+        <div class="stat-card">
+          <div>Total Paid (Cash Out)</div>
+          <div class="stat-val text-red" id="cf-out">₹0.00</div>
+        </div>
+        <div class="stat-card">
+          <div>Net Cash Flow</div>
+          <div class="stat-val text-blue" id="cf-net">₹0.00</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>💰 Outstanding Cash Metrics</h3>
+        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.95rem;">
+          <span>Pending to Collect (Receivables):</span>
+          <b id="cf-pending-rec" class="text-green">₹0.00</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.95rem;">
+          <span>Pending to Pay (Payables):</span>
+          <b id="cf-pending-pay" class="text-red">₹0.00</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESTOCK & FAST MOVING ITEMS -->
+    <div id="tab-restock" class="tab-content hidden">
+      <div class="card">
+        <h3>🔥 Top 5 Fastest Moving Items</h3>
+        <table>
+          <thead>
+            <tr><th>Item</th><th>Units Sold</th><th>Sales Value (₹)</th></tr>
+          </thead>
+          <tbody id="fast-moving-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>⚠️ Items Needing Restock Quickly (Stock &le; 3)</h3>
+        <table>
+          <thead>
+            <tr><th>Item</th><th>Category</th><th>Current Stock</th></tr>
+          </thead>
+          <tbody id="restock-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RECEIVABLES AND PAYABLES SUMMARY -->
+    <div id="tab-dues" class="tab-content hidden">
+      <div class="card">
+        <h3>📥 Receivables Summary (Customers Owing Money)</h3>
+        <table>
+          <thead>
+            <tr><th>Customer Name</th><th>Pending Balance (₹)</th></tr>
+          </thead>
+          <tbody id="receivables-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>📤 Payables Summary (Amount You Owe Vendors)</h3>
+        <table>
+          <thead>
+            <tr><th>Vendor Name</th><th>Pending Balance (₹)</th></tr>
+          </thead>
+          <tbody id="payables-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <!-- INVOICE DETAIL MODAL -->
@@ -402,6 +522,23 @@
     </div>
   </div>
 
+  <!-- EDIT PAYMENT ENTRY MODAL -->
+  <div id="edit-payment-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h3>Edit Payment Entry</h3>
+      <input type="hidden" id="edit-pay-id">
+      
+      <label>Party Name</label>
+      <input type="text" id="edit-pay-party" readonly>
+
+      <label>Amount (₹)</label>
+      <input type="number" id="edit-pay-amount">
+
+      <button class="btn btn-green" style="margin-top: 15px;" onclick="saveEditedPayment()">Save Changes</button>
+      <button class="btn btn-danger" style="margin-top: 5px; width:100%;" onclick="closeEditPaymentModal()">Cancel</button>
+    </div>
+  </div>
+
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyAzYknsoulMqjCv4bRGUQ7Nop5FFfHsaLk",
@@ -431,6 +568,7 @@
       filterItems('s-item', '');
       renderItemDirectory('');
       renderStockSummary();
+      renderRestockAndFast();
     });
 
     rtdb.ref("logs").on("value", snapshot => {
@@ -440,12 +578,18 @@
       renderHistoryTable();
       renderPartyDropdown();
       renderStockSummary();
+      renderDailyTrends();
+      renderCashFlow();
+      renderRestockAndFast();
+      renderDuesSummary();
     });
 
     rtdb.ref("payments").on("value", snapshot => {
       let data = snapshot.val() || {};
       allPayments = Object.keys(data).map(key => ({ id: key, ...data[key] }));
       renderPartyStatement();
+      renderCashFlow();
+      renderDuesSummary();
     });
 
     function switchTab(tabName, btnEl) {
@@ -460,6 +604,10 @@
       if(tabName === 'history') renderHistoryTable();
       if(tabName === 'accounts') renderPartyDropdown();
       if(tabName === 'lookup') renderItemDirectory('');
+      if(tabName === 'daily') renderDailyTrends();
+      if(tabName === 'cashflow') renderCashFlow();
+      if(tabName === 'restock') renderRestockAndFast();
+      if(tabName === 'dues') renderDuesSummary();
     }
 
     function extractAndRenderParties() {
@@ -477,6 +625,17 @@
           if(!suppliersList.some(s => s.toLowerCase() === partyTrimmed.toLowerCase())) {
             suppliersList.push(partyTrimmed);
           }
+        }
+      });
+
+      // Also parse payments
+      allPayments.forEach(p => {
+        if(!p.party) return;
+        let partyTrimmed = p.party.trim();
+        if(p.partyType === 'Customer') {
+          if(!customersList.some(c => c.toLowerCase() === partyTrimmed.toLowerCase())) customersList.push(partyTrimmed);
+        } else {
+          if(!suppliersList.some(s => s.toLowerCase() === partyTrimmed.toLowerCase())) suppliersList.push(partyTrimmed);
         }
       });
 
@@ -580,9 +739,9 @@
       let grandTotal = 0;
       saleCart.forEach((item, idx) => {
         grandTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} @ ₹${item.rate} = ₹${item.total}</div><button class="btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
+        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> x ${item.qty} @ ₹${item.rate.toFixed(2)} = ₹${item.total.toFixed(2)}</div><button class="btn-danger" onclick="saleCart.splice(${idx},1);renderSaleCart();">X</button></div>`;
       });
-      document.getElementById('s-grand-total').textContent = grandTotal;
+      document.getElementById('s-grand-total').textContent = grandTotal.toFixed(2);
     }
 
     async function submitFinalSale() {
@@ -614,7 +773,7 @@
         items: saleCart,
         total: totalBill,
         paid: paid,
-        date: new Date().toLocaleDateString()
+        date: new Date().toLocaleDateString('en-CA')
       });
 
       alert(isReturn ? "Sales Return Recorded!" : "Sale Recorded Successfully!");
@@ -648,12 +807,12 @@
       let itemsTotal = 0;
       purchaseCart.forEach((item, idx) => {
         itemsTotal += item.total;
-        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> (${item.category}) x ${item.qty} @ ₹${item.cost} = ₹${item.total}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
+        container.innerHTML += `<div class="cart-item"><div><b>${item.name}</b> (${item.category}) x ${item.qty} @ ₹${item.cost.toFixed(2)} = ₹${item.total.toFixed(2)}</div><button class="btn-danger" onclick="purchaseCart.splice(${idx},1);renderPurchaseCart();">X</button></div>`;
       });
 
       let misc = parseFloat(document.getElementById('p-misc').value) || 0;
-      document.getElementById('p-sub-total').textContent = itemsTotal;
-      document.getElementById('p-grand-total').textContent = itemsTotal + misc;
+      document.getElementById('p-sub-total').textContent = itemsTotal.toFixed(2);
+      document.getElementById('p-grand-total').textContent = (itemsTotal + misc).toFixed(2);
     }
 
     async function submitFinalPurchase() {
@@ -712,7 +871,7 @@
         miscCharges: miscCharges,
         total: grandTotal,
         paid: paid,
-        date: new Date().toLocaleDateString()
+        date: new Date().toLocaleDateString('en-CA')
       });
 
       alert(isReturn ? "Purchase Return Recorded!" : "Purchase Invoice Saved!");
@@ -743,8 +902,8 @@
         tr.innerHTML = `
           <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
           <td><b>${stock.closing}</b></td>
-          <td>₹${item.costPrice || 0}</td>
-          <td>₹${item.sellingPrice || 0}</td>
+          <td>₹${(item.costPrice || 0).toFixed(2)}</td>
+          <td>₹${(item.sellingPrice || 0).toFixed(2)}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -752,12 +911,11 @@
 
     function renderPartyDropdown() {
       let partyType = document.getElementById('acc-type').value;
-      let parties = partyType === 'Customer' ? customersList : suppliersList;
-
       let select = document.getElementById('acc-party');
-      if(!select) return;
-      select.innerHTML = '<option value="">-- Select Name --</option>';
-      parties.forEach(p => {
+      select.innerHTML = '';
+      let list = partyType === 'Customer' ? customersList : suppliersList;
+      
+      list.forEach(p => {
         let opt = document.createElement('option');
         opt.value = p;
         opt.textContent = p;
@@ -767,117 +925,509 @@
       renderPartyStatement();
     }
 
+    // ISSUE #1 RECTIFIED & ISSUE #4 ITEM-WISE TRANSACTIONS ADDED
     function renderPartyStatement() {
+      let partyType = document.getElementById('acc-type').value;
       let partyName = document.getElementById('acc-party').value;
-      let tbody = document.querySelector("#party-table tbody");
+      let tbody = document.querySelector('#party-table tbody');
       if(!tbody) return;
       tbody.innerHTML = '';
 
       if(!partyName) {
-        document.getElementById('party-balance').textContent = '₹0';
+        document.getElementById('party-balance').textContent = '₹0.00';
+        document.getElementById('party-tot-sales-purch').textContent = '₹0.00';
+        document.getElementById('party-tot-paid-rec').textContent = '₹0.00';
         return;
       }
 
-      let logs = allLogs.filter(l => l.party && l.party.toLowerCase() === partyName.toLowerCase());
-      let payments = allPayments.filter(p => p.party && p.party.toLowerCase() === partyName.toLowerCase());
+      let partyLogs = allLogs.filter(l => l.party && l.party.toLowerCase() === partyName.toLowerCase());
+      let partyPmts = allPayments.filter(p => p.party && p.party.toLowerCase() === partyName.toLowerCase());
 
-      let totalBill = 0;
-      let totalPaid = 0;
+      let balance = 0;
+      let totalSalesPurch = 0;
+      let totalPaidRec = 0;
 
-      logs.forEach(l => {
-        let sign = (l.type === 'SALE_RETURN' || l.type === 'PURCHASE_RETURN') ? -1 : 1;
-        totalBill += (l.total * sign);
-        totalPaid += ((l.paid || 0) * sign);
+      let combinedEvents = [];
 
-        let tr = document.createElement('tr');
-        tr.innerHTML = `<td>${l.date}</td><td>${l.type}: ${l.invNum || '-'}</td><td>₹${l.total * sign}</td><td>₹${(l.paid || 0) * sign}</td>`;
-        tbody.appendChild(tr);
+      partyLogs.forEach(l => {
+        combinedEvents.push({
+          date: l.date || 'N/A',
+          type: l.type,
+          invNum: l.invNum,
+          items: l.items || [],
+          total: l.total || 0,
+          paid: l.paid || 0,
+          isLog: true,
+          id: l.id
+        });
       });
 
-      payments.forEach(p => {
-        totalPaid += p.amount;
-        let tr = document.createElement('tr');
-        tr.style.background = "#f0fdf4";
-        tr.innerHTML = `<td>${p.date}</td><td><i>Direct Payment / Adjustment</i></td><td>-</td><td>₹${p.amount}</td>`;
-        tbody.appendChild(tr);
+      partyPmts.forEach(p => {
+        combinedEvents.push({
+          date: p.date || 'N/A',
+          type: 'PAYMENT',
+          invNum: 'DIRECT PAYMENT',
+          items: [],
+          total: 0,
+          paid: p.amount || 0,
+          isLog: false,
+          id: p.id
+        });
       });
 
-      let dueBalance = totalBill - totalPaid;
-      document.getElementById('party-balance').textContent = '₹' + dueBalance;
+      combinedEvents.forEach(e => {
+        let tr = document.createElement('tr');
+        
+        if(e.isLog) {
+          totalSalesPurch += e.total;
+          totalPaidRec += e.paid;
+
+          if(partyType === 'Customer') {
+            // SALE increases balance due, SALE_RETURN decreases it
+            // RECTIFICATION FOR ISSUE #1: If we PURCHASE from a customer, it DECREASES their debit balance
+            if(e.type === 'SALE') balance += (e.total - e.paid);
+            if(e.type === 'SALE_RETURN') balance -= (e.total - e.paid);
+            if(e.type === 'PURCHASE') balance -= (e.total - e.paid); // Corrected logic!
+            if(e.type === 'PURCHASE_RETURN') balance += (e.total - e.paid);
+          } else { // Vendor
+            // PURCHASE increases amount we owe vendor
+            if(e.type === 'PURCHASE') balance += (e.total - e.paid);
+            if(e.type === 'PURCHASE_RETURN') balance -= (e.total - e.paid);
+            if(e.type === 'SALE') balance -= (e.total - e.paid);
+            if(e.type === 'SALE_RETURN') balance += (e.total - e.paid);
+          }
+
+          let badge = `<span class="badge badge-sale">${e.type}</span>`;
+          if(e.type.includes('PURCHASE')) badge = `<span class="badge badge-purchase">${e.type}</span>`;
+
+          tr.innerHTML = `
+            <td>${e.date}</td>
+            <td>${badge} <b>${e.invNum}</b></td>
+            <td>₹${e.total.toFixed(2)}</td>
+            <td>₹${e.paid.toFixed(2)}</td>
+            <td><button class="btn-view" onclick="openInvoiceModal('${e.id}')">View</button></td>
+          `;
+          tbody.appendChild(tr);
+
+          // Render Item Wise rows inside ledger (ISSUE #4)
+          if(e.items && e.items.length > 0) {
+            e.items.forEach(it => {
+              let subTr = document.createElement('tr');
+              subTr.className = 'item-subrow';
+              subTr.innerHTML = `
+                <td></td>
+                <td colspan="4">↳ ${it.name} (Qty: ${it.qty} @ ₹${(it.rate || it.cost || 0).toFixed(2)}) = ₹${(it.total || 0).toFixed(2)}</td>
+              `;
+              tbody.appendChild(subTr);
+            });
+          }
+
+        } else {
+          // Direct Payment Entry
+          totalPaidRec += e.paid;
+          balance -= e.paid;
+
+          tr.innerHTML = `
+            <td>${e.date}</td>
+            <td><span class="badge badge-payment">PAYMENT</span> Direct Payment/Adjustment</td>
+            <td>-</td>
+            <td>₹${e.paid.toFixed(2)}</td>
+            <td><button class="btn-edit" onclick="openEditPaymentModal('${e.id}', '${partyName}', ${e.paid})">Edit</button></td>
+          `;
+          tbody.appendChild(tr);
+        }
+      });
+
+      document.getElementById('party-balance').textContent = `₹${balance.toFixed(2)}`;
+      document.getElementById('party-tot-sales-purch').textContent = `₹${totalSalesPurch.toFixed(2)}`;
+      document.getElementById('party-tot-paid-rec').textContent = `₹${totalPaidRec.toFixed(2)}`;
     }
 
+    // ISSUE #2 RECORD & EDIT PAYMENT ENTRIES
     async function savePartyPayment() {
-      let partyName = document.getElementById('acc-party').value;
-      let amount = parseFloat(document.getElementById('party-adjust-amount').value);
+      let partyType = document.getElementById('acc-type').value;
+      let party = document.getElementById('acc-party').value;
+      let amount = parseFloat(document.getElementById('party-adjust-amount').value) || 0;
 
-      if(!partyName || !amount || amount <= 0) return alert("Select a party and enter a valid amount.");
+      if(!party || amount <= 0) return alert("Enter valid payment amount.");
 
       await rtdb.ref("payments").push({
-        party: partyName,
+        partyType: partyType,
+        party: party,
         amount: amount,
-        date: new Date().toLocaleDateString()
+        date: new Date().toLocaleDateString('en-CA')
       });
 
-      alert("Payment Recorded & Balance Adjusted!");
+      alert("Payment/Adjustment Saved!");
       document.getElementById('party-adjust-amount').value = '';
     }
 
+    function openEditPaymentModal(payId, party, amount) {
+      document.getElementById('edit-pay-id').value = payId;
+      document.getElementById('edit-pay-party').value = party;
+      document.getElementById('edit-pay-amount').value = amount;
+      document.getElementById('edit-payment-modal').classList.remove('hidden');
+    }
+
+    function closeEditPaymentModal() {
+      document.getElementById('edit-payment-modal').classList.add('hidden');
+    }
+
+    async function saveEditedPayment() {
+      let payId = document.getElementById('edit-pay-id').value;
+      let amount = parseFloat(document.getElementById('edit-pay-amount').value) || 0;
+
+      if(amount <= 0) return alert("Enter valid amount.");
+
+      await rtdb.ref("payments/" + payId).update({
+        amount: amount
+      });
+
+      alert("Payment updated successfully!");
+      closeEditPaymentModal();
+    }
+
     function renderHistoryTable() {
-      let tbody = document.querySelector("#history-table tbody");
+      let tbody = document.querySelector('#history-table tbody');
       if(!tbody) return;
       tbody.innerHTML = '';
 
-      [...allLogs].reverse().forEach(log => {
+      allLogs.forEach(l => {
         let tr = document.createElement('tr');
-        let badgeClass = 'badge-sale';
-        if(log.type === 'PURCHASE') badgeClass = 'badge-purchase';
-        if(log.type.includes('RETURN')) badgeClass = 'badge-return';
-
         tr.innerHTML = `
-          <td><span class="badge ${badgeClass}">${log.type}</span></td>
-          <td><b>${log.invNum || 'N/A'}</b><br><small>${log.party}</small></td>
-          <td>₹${log.total}</td>
-          <td>₹${log.paid || 0}</td>
+          <td><span class="badge ${l.type.includes('SALE') ? 'badge-sale':'badge-purchase'}">${l.type}</span></td>
+          <td><b>${l.invNum}</b><br><small>${l.party}</small></td>
+          <td>₹${(l.total || 0).toFixed(2)}</td>
+          <td>₹${(l.paid || 0).toFixed(2)}</td>
           <td>
-            <button class="btn-view" onclick="viewInvoiceDetails('${log.id}')">View</button>
-            <button class="btn-edit" onclick="openEditModal('${log.id}')">Edit</button>
-            <button class="btn-danger" onclick="deleteInvoiceEntry('${log.id}')">Del</button>
+            <button class="btn-view" onclick="openInvoiceModal('${l.id}')">View</button>
+            <button class="btn-edit" onclick="openEditModal('${l.id}')">Edit</button>
           </td>
         `;
-
         tbody.appendChild(tr);
       });
     }
 
-    function viewInvoiceDetails(id) {
-      let log = allLogs.find(l => l.id === id);
-      if(!log) return;
+    // ISSUE #3 DECIMALS TO 2 DIGITS
+    function renderStockSummary() {
+      let totalSales = 0;
+      let totalPurchases = 0;
+      let cogsTotal = 0;
 
-      document.getElementById('modal-title').textContent = `${log.type} Invoice: ${log.invNum || 'N/A'}`;
-      document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${log.date}`;
+      let categoryProfitMap = {};
+      let categoryQtyMap = {};
 
-      let tbody = document.querySelector("#modal-items-table tbody");
+      allLogs.forEach(l => {
+        let isSale = l.type === 'SALE';
+        let isSaleReturn = l.type === 'SALE_RETURN';
+        let isPur = l.type === 'PURCHASE';
+        let isPurReturn = l.type === 'PURCHASE_RETURN';
+
+        if(isSale) totalSales += l.total;
+        if(isSaleReturn) totalSales -= l.total;
+        if(isPur) totalPurchases += l.total;
+        if(isPurReturn) totalPurchases -= l.total;
+
+        let items = l.items || [];
+        items.forEach(it => {
+          let itemMaster = allItems.find(i => i.name.toLowerCase() === (it.name || '').toLowerCase());
+          let cat = (itemMaster ? itemMaster.category : it.category) || 'General';
+          let costPrice = itemMaster ? (itemMaster.costPrice || 0) : (it.cost || 0);
+
+          if(!categoryProfitMap[cat]) categoryProfitMap[cat] = { sales: 0, cogs: 0 };
+
+          if(isSale) {
+            let itemCogs = (it.qty || 0) * costPrice;
+            cogsTotal += itemCogs;
+            categoryProfitMap[cat].sales += (it.total || 0);
+            categoryProfitMap[cat].cogs += itemCogs;
+          }
+          if(isSaleReturn) {
+            let itemCogs = (it.qty || 0) * costPrice;
+            cogsTotal -= itemCogs;
+            categoryProfitMap[cat].sales -= (it.total || 0);
+            categoryProfitMap[cat].cogs -= itemCogs;
+          }
+        });
+      });
+
+      document.getElementById('stat-sales').textContent = `₹${totalSales.toFixed(2)}`;
+      document.getElementById('stat-purchases').textContent = `₹${totalPurchases.toFixed(2)}`;
+
+      document.getElementById('prof-sales').textContent = `₹${totalSales.toFixed(2)}`;
+      document.getElementById('prof-cogs').textContent = `₹${cogsTotal.toFixed(2)}`;
+      let grossProfit = totalSales - cogsTotal;
+      document.getElementById('prof-gross').textContent = `₹${grossProfit.toFixed(2)}`;
+
+      // Category Profitability Table
+      let catProfTbody = document.querySelector('#category-profitability-table tbody');
+      if(catProfTbody) {
+        catProfTbody.innerHTML = '';
+        Object.keys(categoryProfitMap).forEach(cat => {
+          let s = categoryProfitMap[cat].sales;
+          let c = categoryProfitMap[cat].cogs;
+          let p = s - c;
+          let tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><b>${cat}</b></td>
+            <td>₹${s.toFixed(2)}</td>
+            <td>₹${c.toFixed(2)}</td>
+            <td class="${p >= 0 ? 'text-green' : 'text-red'}"><b>₹${p.toFixed(2)}</b></td>
+          `;
+          catProfTbody.appendChild(tr);
+        });
+      }
+
+      // Category Stock Qty Table
+      allItems.forEach(item => {
+        let cat = item.category || 'General';
+        let stock = calculateStockForItem(item.name);
+        categoryQtyMap[cat] = (categoryQtyMap[cat] || 0) + stock.closing;
+      });
+
+      let catQtyTbody = document.querySelector('#category-summary-table tbody');
+      if(catQtyTbody) {
+        catQtyTbody.innerHTML = '';
+        Object.keys(categoryQtyMap).forEach(cat => {
+          let tr = document.createElement('tr');
+          tr.innerHTML = `<td><b>${cat}</b></td><td><b>${categoryQtyMap[cat]}</b></td>`;
+          catQtyTbody.appendChild(tr);
+        });
+      }
+
+      renderStockSummaryTable('');
+    }
+
+    function renderStockSummaryTable(query) {
+      let tbody = document.querySelector('#stock-summary-table tbody');
+      if(!tbody) return;
       tbody.innerHTML = '';
 
-      let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate || log.cost, total: log.total }];
-
-      itemsList.forEach(i => {
+      let filtered = allItems.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
+      filtered.forEach(item => {
+        let stock = calculateStockForItem(item.name);
         let tr = document.createElement('tr');
-        let rateVal = i.rate || i.cost || 0;
-        tr.innerHTML = `<td><b>${i.name}</b></td><td>${i.qty}</td><td>₹${rateVal}</td><td>₹${i.total}</td>`;
+        tr.innerHTML = `
+          <td><b>${item.name}</b></td>
+          <td>${stock.opening}</td>
+          <td>${stock.purchased}</td>
+          <td>${stock.sold}</td>
+          <td><b>${stock.closing}</b></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ISSUE #5 DAY WISE SALES / PURCHASE / PROFITABILITY
+    function renderDailyTrends() {
+      let tbody = document.getElementById('daily-trends-table-body');
+      if(!tbody) return;
+      tbody.innerHTML = '';
+
+      let filterDate = document.getElementById('daily-date-filter').value;
+
+      let dailyMap = {};
+
+      allLogs.forEach(l => {
+        let dateKey = l.date || 'Unknown';
+        if(filterDate && dateKey !== filterDate) return;
+
+        if(!dailyMap[dateKey]) dailyMap[dateKey] = { sales: 0, purchases: 0, cogs: 0 };
+
+        if(l.type === 'SALE') dailyMap[dateKey].sales += (l.total || 0);
+        if(l.type === 'SALE_RETURN') dailyMap[dateKey].sales -= (l.total || 0);
+        if(l.type === 'PURCHASE') dailyMap[dateKey].purchases += (l.total || 0);
+        if(l.type === 'PURCHASE_RETURN') dailyMap[dateKey].purchases -= (l.total || 0);
+
+        // COGS calculation for day
+        let items = l.items || [];
+        items.forEach(it => {
+          let itemMaster = allItems.find(i => i.name.toLowerCase() === (it.name || '').toLowerCase());
+          let costPrice = itemMaster ? (itemMaster.costPrice || 0) : (it.cost || 0);
+          if(l.type === 'SALE') dailyMap[dateKey].cogs += (it.qty || 0) * costPrice;
+          if(l.type === 'SALE_RETURN') dailyMap[dateKey].cogs -= (it.qty || 0) * costPrice;
+        });
+      });
+
+      Object.keys(dailyMap).sort().reverse().forEach(date => {
+        let d = dailyMap[date];
+        let profit = d.sales - d.cogs;
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${date}</b></td>
+          <td class="text-green">₹${d.sales.toFixed(2)}</td>
+          <td class="text-red">₹${d.purchases.toFixed(2)}</td>
+          <td class="${profit >= 0 ? 'text-green' : 'text-red'}"><b>₹${profit.toFixed(2)}</b></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ISSUE #6 CASH FLOW SECTION
+    function renderCashFlow() {
+      let cashIn = 0;
+      let cashOut = 0;
+
+      // From logs
+      allLogs.forEach(l => {
+        if(l.type === 'SALE' || l.type === 'PURCHASE_RETURN') cashIn += (l.paid || 0);
+        if(l.type === 'PURCHASE' || l.type === 'SALE_RETURN') cashOut += (l.paid || 0);
+      });
+
+      // From direct payments
+      allPayments.forEach(p => {
+        if(p.partyType === 'Customer') cashIn += (p.amount || 0);
+        if(p.partyType === 'Vendor') cashOut += (p.amount || 0);
+      });
+
+      let netCash = cashIn - cashOut;
+
+      document.getElementById('cf-in').textContent = `₹${cashIn.toFixed(2)}`;
+      document.getElementById('cf-out').textContent = `₹${cashOut.toFixed(2)}`;
+      document.getElementById('cf-net').textContent = `₹${netCash.toFixed(2)}`;
+
+      // Calculate total pending receivables and payables
+      let totalReceivables = 0;
+      let totalPayables = 0;
+
+      customersList.forEach(c => {
+        let bal = getPartyBalance(c, 'Customer');
+        if(bal > 0) totalReceivables += bal;
+      });
+
+      suppliersList.forEach(s => {
+        let bal = getPartyBalance(s, 'Vendor');
+        if(bal > 0) totalPayables += bal;
+      });
+
+      document.getElementById('cf-pending-rec').textContent = `₹${totalReceivables.toFixed(2)}`;
+      document.getElementById('cf-pending-pay').textContent = `₹${totalPayables.toFixed(2)}`;
+    }
+
+    function getPartyBalance(partyName, partyType) {
+      let partyLogs = allLogs.filter(l => l.party && l.party.toLowerCase() === partyName.toLowerCase());
+      let partyPmts = allPayments.filter(p => p.party && p.party.toLowerCase() === partyName.toLowerCase());
+
+      let balance = 0;
+      partyLogs.forEach(e => {
+        if(partyType === 'Customer') {
+          if(e.type === 'SALE') balance += (e.total - e.paid);
+          if(e.type === 'SALE_RETURN') balance -= (e.total - e.paid);
+          if(e.type === 'PURCHASE') balance -= (e.total - e.paid);
+          if(e.type === 'PURCHASE_RETURN') balance += (e.total - e.paid);
+        } else {
+          if(e.type === 'PURCHASE') balance += (e.total - e.paid);
+          if(e.type === 'PURCHASE_RETURN') balance -= (e.total - e.paid);
+          if(e.type === 'SALE') balance -= (e.total - e.paid);
+          if(e.type === 'SALE_RETURN') balance += (e.total - e.paid);
+        }
+      });
+
+      partyPmts.forEach(p => {
+        balance -= p.amount;
+      });
+
+      return balance;
+    }
+
+    // ISSUE #7 FASTEST MOVING & RESTOCK SECTION
+    function renderRestockAndFast() {
+      let fastTbody = document.getElementById('fast-moving-table-body');
+      let restockTbody = document.getElementById('restock-table-body');
+      if(!fastTbody || !restockTbody) return;
+
+      fastTbody.innerHTML = '';
+      restockTbody.innerHTML = '';
+
+      let itemSalesMap = {};
+
+      allLogs.forEach(l => {
+        if(l.type === 'SALE') {
+          (l.items || []).forEach(it => {
+            if(!itemSalesMap[it.name]) itemSalesMap[it.name] = { qty: 0, val: 0 };
+            itemSalesMap[it.name].qty += (it.qty || 0);
+            itemSalesMap[it.name].val += (it.total || 0);
+          });
+        }
+      });
+
+      let sortedFast = Object.keys(itemSalesMap).map(k => ({
+        name: k,
+        qty: itemSalesMap[k].qty,
+        val: itemSalesMap[k].val
+      })).sort((a, b) => b.qty - a.qty).slice(0, 5);
+
+      sortedFast.forEach(item => {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td><b>${item.name}</b></td><td>${item.qty} units</td><td>₹${item.val.toFixed(2)}</td>`;
+        fastTbody.appendChild(tr);
+      });
+
+      // Restock needed items (Stock <= 3)
+      allItems.forEach(item => {
+        let stock = calculateStockForItem(item.name);
+        if(stock.closing <= 3) {
+          let tr = document.createElement('tr');
+          tr.innerHTML = `<td><b>${item.name}</b></td><td>${item.category || 'General'}</td><td class="text-red"><b>${stock.closing}</b></td>`;
+          restockTbody.appendChild(tr);
+        }
+      });
+    }
+
+    // ISSUE #8 RECEIVABLES AND PAYABLES SUMMARY
+    function renderDuesSummary() {
+      let recTbody = document.getElementById('receivables-table-body');
+      let payTbody = document.getElementById('payables-table-body');
+      if(!recTbody || !payTbody) return;
+
+      recTbody.innerHTML = '';
+      payTbody.innerHTML = '';
+
+      customersList.forEach(c => {
+        let bal = getPartyBalance(c, 'Customer');
+        if(bal > 0) {
+          let tr = document.createElement('tr');
+          tr.innerHTML = `<td><b>${c}</b></td><td class="text-green"><b>₹${bal.toFixed(2)}</b></td>`;
+          recTbody.appendChild(tr);
+        }
+      });
+
+      suppliersList.forEach(s => {
+        let bal = getPartyBalance(s, 'Vendor');
+        if(bal > 0) {
+          let tr = document.createElement('tr');
+          tr.innerHTML = `<td><b>${s}</b></td><td class="text-red"><b>₹${bal.toFixed(2)}</b></td>`;
+          payTbody.appendChild(tr);
+        }
+      });
+    }
+
+    // MODAL DIALOGS
+    function openInvoiceModal(logId) {
+      let log = allLogs.find(l => l.id === logId);
+      if(!log) return;
+
+      document.getElementById('modal-title').textContent = `${log.type} (${log.invNum})`;
+      document.getElementById('modal-subtitle').textContent = `Party: ${log.party} | Date: ${log.date}`;
+
+      let tbody = document.querySelector('#modal-items-table tbody');
+      tbody.innerHTML = '';
+
+      (log.items || []).forEach(it => {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${it.name}</b></td>
+          <td>${it.qty}</td>
+          <td>₹${(it.rate || it.cost || 0).toFixed(2)}</td>
+          <td>₹${(it.total || 0).toFixed(2)}</td>
+        `;
         tbody.appendChild(tr);
       });
 
-      let subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
-      let misc = log.miscCharges || 0;
-      let due = log.total - (log.paid || 0);
-
       document.getElementById('modal-summary-box').innerHTML = `
-        <div>Items Subtotal: <b>₹${subtotal}</b></div>
-        ${misc ? `<div>Freight / Misc Charges: <b>₹${misc}</b></div>` : ''}
-        <div style="font-size:1rem; color:#111827; margin-top:4px;">Grand Total: <b>₹${log.total}</b></div>
-        <div style="color:#059669;">Amount Paid: ₹${log.paid || 0}</div>
-        <div style="color:#dc2626;">Balance Due: ₹${due}</div>
+        Total Amount: <b>₹${(log.total || 0).toFixed(2)}</b><br>
+        Paid Amount: <b>₹${(log.paid || 0).toFixed(2)}</b><br>
+        Balance: <b class="text-red">₹${((log.total || 0) - (log.paid || 0)).toFixed(2)}</b>
       `;
 
       document.getElementById('invoice-modal').classList.remove('hidden');
@@ -887,33 +1437,24 @@
       document.getElementById('invoice-modal').classList.add('hidden');
     }
 
-    function openEditModal(id) {
-      let log = allLogs.find(l => l.id === id);
+    function openEditModal(logId) {
+      let log = allLogs.find(l => l.id === logId);
       if(!log) return;
 
-      document.getElementById('edit-log-id').value = id;
-      document.getElementById('edit-party').value = log.party || '';
-      document.getElementById('edit-paid').value = log.paid || 0;
+      document.getElementById('edit-log-id').value = logId;
+      document.getElementById('edit-party').value = log.party;
+      document.getElementById('edit-paid').value = log.paid;
 
-      let itemsContainer = document.getElementById('edit-items-container');
-      itemsContainer.innerHTML = '';
+      let container = document.getElementById('edit-items-container');
+      container.innerHTML = '';
 
-      let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate || log.cost }];
-
-      itemsList.forEach((item, idx) => {
-        let rateVal = item.rate || item.cost || 0;
-        itemsContainer.innerHTML += `
-          <div style="border-bottom: 1px solid #e5e7eb; padding: 8px 0;">
-            <b>${item.name}</b>
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <div style="flex: 1;">
-                <label style="margin:0;">Qty</label>
-                <input type="number" class="edit-item-qty" data-index="${idx}" data-name="${item.name}" value="${item.qty}" min="1">
-              </div>
-              <div style="flex: 1;">
-                <label style="margin:0;">Rate (₹)</label>
-                <input type="number" class="edit-item-rate" data-index="${idx}" value="${rateVal}">
-              </div>
+      (log.items || []).forEach((it, idx) => {
+        container.innerHTML += `
+          <div style="border-bottom:1px solid #eee; padding: 6px 0;">
+            <b>${it.name}</b>
+            <div style="display:flex; gap:8px; margin-top:4px;">
+              <input type="number" id="edit-qty-${idx}" value="${it.qty}" placeholder="Qty">
+              <input type="number" id="edit-rate-${idx}" value="${it.rate || it.cost}" placeholder="Rate">
             </div>
           </div>
         `;
@@ -927,183 +1468,36 @@
     }
 
     async function saveEditedInvoice() {
-      let id = document.getElementById('edit-log-id').value;
-      let log = allLogs.find(l => l.id === id);
+      let logId = document.getElementById('edit-log-id').value;
+      let log = allLogs.find(l => l.id === logId);
       if(!log) return;
 
-      let newParty = document.getElementById('edit-party').value.trim();
-      let newPaid = parseFloat(document.getElementById('edit-paid').value) || 0;
+      let updatedParty = document.getElementById('edit-party').value;
+      let updatedPaid = parseFloat(document.getElementById('edit-paid').value) || 0;
 
-      let qtyInputs = document.querySelectorAll('.edit-item-qty');
-      let rateInputs = document.querySelectorAll('.edit-item-rate');
-
-      let updatedItems = [];
-      let newSubtotal = 0;
-
-      qtyInputs.forEach((input, idx) => {
-        let name = input.getAttribute('data-name');
-        let qty = parseInt(input.value) || 1;
-        let rate = parseFloat(rateInputs[idx].value) || 0;
-        let itemTotal = qty * rate;
-        newSubtotal += itemTotal;
-
-        updatedItems.push({
-          name: name,
-          qty: qty,
-          rate: rate,
-          cost: rate,
-          total: itemTotal
-        });
+      let updatedItems = (log.items || []).map((it, idx) => {
+        let q = parseInt(document.getElementById(`edit-qty-${idx}`).value) || 0;
+        let r = parseFloat(document.getElementById(`edit-rate-${idx}`).value) || 0;
+        return {
+          ...it,
+          qty: q,
+          rate: r,
+          cost: r,
+          total: q * r
+        };
       });
 
-      let misc = log.miscCharges || 0;
-      let newGrandTotal = newSubtotal + misc;
+      let updatedTotal = updatedItems.reduce((a, b) => a + b.total, 0);
 
-      await rtdb.ref("logs/" + id).update({
-        party: newParty,
-        paid: newPaid,
+      await rtdb.ref("logs/" + logId).update({
+        party: updatedParty,
+        paid: updatedPaid,
         items: updatedItems,
-        total: newGrandTotal
+        total: updatedTotal
       });
 
-      alert("Invoice Updated & Quantities Recalculated!");
+      alert("Invoice Updated!");
       closeEditModal();
-    }
-
-    async function deleteInvoiceEntry(id) {
-      if(!confirm("Delete this invoice? Stock quantities will update automatically.")) return;
-      await rtdb.ref("logs/" + id).remove();
-      alert("Invoice Deleted!");
-    }
-
-    function renderStockSummary() {
-      renderCategorySummary();
-      renderStockSummaryTable('');
-      calculateProfitability();
-
-      let netSales = allLogs.reduce((sum, l) => {
-        if(l.type === 'SALE') return sum + l.total;
-        if(l.type === 'SALE_RETURN') return sum - l.total;
-        return sum;
-      }, 0);
-
-      let netPurchases = allLogs.reduce((sum, l) => {
-        if(l.type === 'PURCHASE') return sum + l.total;
-        if(l.type === 'PURCHASE_RETURN') return sum - l.total;
-        return sum;
-      }, 0);
-      
-      let sEl = document.getElementById('stat-sales');
-      let pEl = document.getElementById('stat-purchases');
-      if(sEl) sEl.textContent = '₹' + netSales;
-      if(pEl) pEl.textContent = '₹' + netPurchases;
-    }
-
-    function calculateProfitability() {
-      let categoryMetrics = {};
-
-      allLogs.forEach(log => {
-        if(log.type === 'SALE' || log.type === 'SALE_RETURN') {
-          let multiplier = log.type === 'SALE_RETURN' ? -1 : 1;
-          let itemsList = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, total: log.total }];
-          
-          itemsList.forEach(item => {
-            let masterItem = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
-            let cat = masterItem ? (masterItem.category || 'General') : 'General';
-            let unitCost = masterItem ? (masterItem.costPrice || 0) : 0;
-
-            let qtySold = (parseInt(item.qty) || 0) * multiplier;
-            let saleTotal = (item.total || (qtySold * (item.rate || 0))) * multiplier;
-            let cogs = qtySold * unitCost;
-
-            if(!categoryMetrics[cat]) {
-              categoryMetrics[cat] = { sales: 0, cogs: 0 };
-            }
-
-            categoryMetrics[cat].sales += saleTotal;
-            categoryMetrics[cat].cogs += cogs;
-          });
-        }
-      });
-
-      let totalSalesValue = 0;
-      let totalCOGS = 0;
-
-      let tbody = document.querySelector("#category-profitability-table tbody");
-      if(tbody) tbody.innerHTML = '';
-
-      for(let cat in categoryMetrics) {
-        let s = categoryMetrics[cat].sales;
-        let c = categoryMetrics[cat].cogs;
-        let p = s - c;
-
-        totalSalesValue += s;
-        totalCOGS += c;
-
-        if(tbody) {
-          let tr = document.createElement('tr');
-          let profColor = p < 0 ? 'text-red' : 'text-green';
-          tr.innerHTML = `
-            <td><b>${cat}</b></td>
-            <td>₹${s}</td>
-            <td>₹${c}</td>
-            <td class="${profColor}"><b>₹${p}</b></td>
-          `;
-          tbody.appendChild(tr);
-        }
-      }
-
-      let grossProfit = totalSalesValue - totalCOGS;
-
-      document.getElementById('prof-sales').textContent = '₹' + totalSalesValue;
-      document.getElementById('prof-cogs').textContent = '₹' + totalCOGS;
-      let profEl = document.getElementById('prof-gross');
-      profEl.textContent = '₹' + grossProfit;
-      
-      if(grossProfit < 0) {
-        profEl.className = 'text-red';
-      } else {
-        profEl.className = 'text-green';
-      }
-    }
-
-    function renderCategorySummary() {
-      let catMap = {};
-      allItems.forEach(item => {
-        let cat = item.category || 'General';
-        let stock = calculateStockForItem(item.name);
-        catMap[cat] = (catMap[cat] || 0) + stock.closing;
-      });
-
-      let tbody = document.querySelector("#category-summary-table tbody");
-      if(!tbody) return;
-      tbody.innerHTML = '';
-      for (let cat in catMap) {
-        let tr = document.createElement('tr');
-        tr.innerHTML = `<td><b>${cat}</b></td><td><b>${catMap[cat]}</b></td>`;
-        tbody.appendChild(tr);
-      }
-    }
-
-    function renderStockSummaryTable(query) {
-      let tbody = document.querySelector("#stock-summary-table tbody");
-      if(!tbody) return;
-      tbody.innerHTML = '';
-
-      let filtered = allItems.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
-
-      filtered.forEach(item => {
-        let stock = calculateStockForItem(item.name);
-        let tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><b>${item.name}</b></td>
-          <td>${stock.opening}</td>
-          <td style="color:#059669">+${stock.purchased}</td>
-          <td style="color:#dc2626">-${stock.sold}</td>
-          <td><b>${stock.closing}</b></td>
-        `;
-        tbody.appendChild(tr);
-      });
     }
   </script>
 </body>
