@@ -561,6 +561,30 @@
     let customersList = [];
     let suppliersList = [];
 
+    // Helper: Lookup item purchase rate dynamically across all data sources
+    function getItemPurchaseCost(itemName) {
+      if (!itemName) return 0;
+
+      // 1. Check item catalog entry
+      let catalogItem = allItems.find(i => i.name && i.name.toLowerCase() === itemName.toLowerCase());
+      if (catalogItem && catalogItem.purchaseRate && catalogItem.purchaseRate > 0) {
+        return catalogItem.purchaseRate;
+      }
+
+      // 2. Scan purchase logs for the most recent recorded purchase cost for this item
+      for (let i = allLogs.length - 1; i >= 0; i--) {
+        let log = allLogs[i];
+        if (log.type === 'PURCHASE' && log.items) {
+          let matchedItem = log.items.find(it => it.name && it.name.toLowerCase() === itemName.toLowerCase());
+          if (matchedItem && (matchedItem.cost || matchedItem.rate)) {
+            return parseFloat(matchedItem.cost || matchedItem.rate) || 0;
+          }
+        }
+      }
+
+      return 0;
+    }
+
     // Realtime Listeners
     rtdb.ref("items").on("value", snapshot => {
       let data = snapshot.val() || {};
@@ -848,14 +872,14 @@
       let grandTotal = itemsTotal + misc;
       let type = isReturn ? 'PURCHASE_RETURN' : 'PURCHASE';
 
-      // 1. Sync catalog items
+      // 1. Sync catalog items and ensure purchase rates are stored
       for (let item of purchaseCart) {
         let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
         if(existing) {
           await rtdb.ref("items/" + existing.key).update({
             category: item.category,
             purchaseRate: item.cost,
-            sellingPrice: item.sell
+            sellingPrice: item.sell || existing.sellingPrice || 0
           });
         } else {
           await rtdb.ref("items").push({
@@ -904,11 +928,12 @@
 
       filtered.forEach(item => {
         let stock = calculateStockForItem(item.name);
+        let pRate = item.purchaseRate || getItemPurchaseCost(item.name);
         tbody.innerHTML += `
           <tr>
             <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
             <td><b>${stock.closing}</b></td>
-            <td>₹${(item.purchaseRate || 0).toFixed(2)}</td>
+            <td>₹${pRate.toFixed(2)}</td>
             <td>₹${(item.sellingPrice || 0).toFixed(2)}</td>
           </tr>
         `;
@@ -1188,8 +1213,8 @@
       let newItems = [];
       let newTotal = 0;
 
-      names.forEach((el, idx) => {
-        let n = el.value;
+      for (let idx = 0; idx < names.length; idx++) {
+        let n = names[idx].value;
         let q = parseInt(qtys[idx].value) || 0;
         let r = parseFloat(rates[idx].value) || 0;
         let t = q * r;
@@ -1197,10 +1222,15 @@
 
         if(log.type.includes('PURCHASE')) {
           newItems.push({ name: n, qty: q, cost: r, total: t });
+          // Update item catalog purchase rate
+          let existing = allItems.find(i => i.name.toLowerCase() === n.toLowerCase());
+          if(existing) {
+            await rtdb.ref("items/" + existing.key).update({ purchaseRate: r });
+          }
         } else {
           newItems.push({ name: n, qty: q, rate: r, total: t });
         }
-      });
+      }
 
       let misc = log.miscCharges || 0;
       newTotal += misc;
@@ -1234,9 +1264,11 @@
       allLogs.forEach(log => {
         let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
         items.forEach(i => {
-          let catalogItem = allItems.find(c => c.name.toLowerCase() === (i.name || '').toLowerCase());
+          let catalogItem = allItems.find(c => c.name && c.name.toLowerCase() === (i.name || '').toLowerCase());
           let category = catalogItem ? (catalogItem.category || 'General') : 'General';
-          let costRate = catalogItem ? (catalogItem.purchaseRate || 0) : (i.cost || 0);
+          
+          // Fixed COGS resolution using fallback helper
+          let costRate = getItemPurchaseCost(i.name);
           let q = parseInt(i.qty) || 0;
 
           if(!catSalesMap[category]) catSalesMap[category] = 0;
@@ -1331,10 +1363,8 @@
     // Helper: Normalize date strings to standard YYYY-MM-DD key for proper grouping and sorting
     function normalizeDateToISO(dateStr) {
       if (!dateStr) return '';
-      // If already ISO YYYY-MM-DD format
       if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
 
-      // Handle slash separated dates: D/M/YYYY or DD/MM/YYYY
       if (dateStr.includes('/')) {
         let parts = dateStr.split('/');
         if (parts.length === 3) {
@@ -1342,16 +1372,13 @@
           let p1 = parts[1].padStart(2, '0');
           let p2 = parts[2];
           
-          // Check if first part is Year (YYYY/MM/DD)
           if (p0.length === 4) {
             return `${p0}-${p1}-${p2}`;
           }
-          // Default DD/MM/YYYY
           return `${p2}-${p1}-${p0}`;
         }
       }
       
-      // Fallback using native Date parsing
       let d = new Date(dateStr);
       if (!isNaN(d.getTime())) {
         let year = d.getFullYear();
@@ -1381,8 +1408,8 @@
         let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
 
         items.forEach(i => {
-          let catalogItem = allItems.find(c => c.name.toLowerCase() === (i.name || '').toLowerCase());
-          let costRate = catalogItem ? (catalogItem.purchaseRate || 0) : (i.cost || 0);
+          // Fixed COGS resolution using fallback helper
+          let costRate = getItemPurchaseCost(i.name);
           let q = parseInt(i.qty) || 0;
 
           if (log.type === 'SALE') {
@@ -1403,13 +1430,11 @@
         });
       });
 
-      // Filter by user selected date if provided
       let keys = Object.keys(dayMap);
       if (filter) {
         keys = keys.filter(k => k === filter);
       }
 
-      // Sort chronologically in descending order (Newest dates first)
       keys.sort((a, b) => new Date(b) - new Date(a));
 
       if (keys.length === 0) {
@@ -1419,7 +1444,6 @@
 
       keys.forEach(isoDate => {
         let data = dayMap[isoDate];
-        // Format YYYY-MM-DD into DD/MM/YYYY for UI display
         let parts = isoDate.split('-');
         let displayDate = (parts.length === 3) ? `${parts[2]}/${parts[1]}/${parts[0]}` : isoDate;
 
