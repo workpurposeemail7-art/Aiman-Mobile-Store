@@ -234,7 +234,7 @@
             <tr>
               <th>Item / Category</th>
               <th>Available Qty</th>
-              <th>Purchase Rate</th>
+              <th>Purchase Rate (Effective)</th>
               <th>Selling Price</th>
             </tr>
           </thead>
@@ -320,7 +320,7 @@
           <b id="prof-sales">₹0.00</b>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.9rem;">
-          <span>Cost of Goods Sold (COGS):</span>
+          <span>Cost of Goods Sold (COGS incl. Freight):</span>
           <b id="prof-cogs">₹0.00</b>
         </div>
         <hr style="margin: 8px 0; border-top: 1px dashed #86efac;">
@@ -488,7 +488,7 @@
 
       <table id="modal-items-table">
         <thead>
-          <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
+          <tr><th>Item</th><th>Qty</th><th>Base Rate</th><th>Total</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -510,6 +510,11 @@
 
       <label>Paid Amount (₹)</label>
       <input type="number" id="edit-paid">
+
+      <div id="edit-misc-wrap">
+        <label>Freight / Misc Charges (₹)</label>
+        <input type="number" id="edit-misc" value="0">
+      </div>
 
       <h4 style="margin-top:15px; font-size:0.9rem;">Invoice Items & Quantities</h4>
       <div id="edit-items-container"></div>
@@ -558,27 +563,47 @@
     let customersList = [];
     let suppliersList = [];
 
-    // Enhanced Helper: Reliable Cost Retrieval across Catalog and Logs
+    // Enhanced Helper: Reliable Effective Cost Retrieval with Proportional Freight Allocation
     function getItemPurchaseCost(itemName) {
       if (!itemName) return 0;
       let cleanName = itemName.trim().toLowerCase();
 
-      // 1. Search Catalog
+      // 1. Scan Purchase Logs backwards for real transactional landed cost (base cost + allocated freight)
+      for (let i = allLogs.length - 1; i >= 0; i--) {
+        let log = allLogs[i];
+        if (log.type === 'PURCHASE' && log.items && log.items.length > 0) {
+          let matchedItem = log.items.find(it => it.name && it.name.trim().toLowerCase() === cleanName);
+          if (matchedItem) {
+            let baseCost = parseFloat(matchedItem.cost || matchedItem.rate || 0);
+            let qty = parseInt(matchedItem.qty) || 1;
+            let misc = parseFloat(log.miscCharges || 0);
+            
+            // Calculate proportional freight allocation if not already allocated directly on item
+            let freightPerUnit = 0;
+            if (misc > 0) {
+              let itemsSubtotal = log.items.reduce((acc, current) => {
+                let c = parseFloat(current.cost || current.rate || 0);
+                let q = parseInt(current.qty) || 1;
+                return acc + (c * q);
+              }, 0);
+
+              if (itemsSubtotal > 0) {
+                let itemTotal = baseCost * qty;
+                let allocatedFreight = (itemTotal / itemsSubtotal) * misc;
+                freightPerUnit = allocatedFreight / qty;
+              }
+            }
+
+            let effectiveCost = baseCost + freightPerUnit;
+            if (effectiveCost > 0) return effectiveCost;
+          }
+        }
+      }
+
+      // 2. Search Catalog fallback
       let catalogItem = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
       if (catalogItem && catalogItem.purchaseRate !== undefined && catalogItem.purchaseRate !== null && parseFloat(catalogItem.purchaseRate) > 0) {
         return parseFloat(catalogItem.purchaseRate);
-      }
-
-      // 2. Scan Purchase Logs
-      for (let i = allLogs.length - 1; i >= 0; i--) {
-        let log = allLogs[i];
-        if (log.type === 'PURCHASE' && log.items) {
-          let matchedItem = log.items.find(it => it.name && it.name.trim().toLowerCase() === cleanName);
-          if (matchedItem) {
-            let costVal = parseFloat(matchedItem.cost || matchedItem.rate || 0);
-            if (costVal > 0) return costVal;
-          }
-        }
       }
 
       return 0;
@@ -869,13 +894,20 @@
       let grandTotal = itemsTotal + misc;
       let type = isReturn ? 'PURCHASE_RETURN' : 'PURCHASE';
 
-      // 1. Sync catalog items and save purchase rates directly
+      // Proportional freight share computation per unit
       for (let item of purchaseCart) {
+        let allocatedFreightPerUnit = 0;
+        if (misc > 0 && itemsTotal > 0) {
+          let itemShareOfFreight = (item.total / itemsTotal) * misc;
+          allocatedFreightPerUnit = itemShareOfFreight / item.qty;
+        }
+        let effectiveUnitCost = parseFloat(item.cost) + allocatedFreightPerUnit;
+
         let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
         if(existing) {
           await rtdb.ref("items/" + existing.key).update({
             category: item.category,
-            purchaseRate: parseFloat(item.cost) || 0,
+            purchaseRate: effectiveUnitCost,
             sellingPrice: parseFloat(item.sell) || existing.sellingPrice || 0
           });
         } else {
@@ -883,7 +915,7 @@
             name: item.name,
             category: item.category,
             openingStock: item.opening,
-            purchaseRate: parseFloat(item.cost) || 0,
+            purchaseRate: effectiveUnitCost,
             sellingPrice: parseFloat(item.sell) || 0
           });
         }
@@ -1118,7 +1150,7 @@
       let tbody = document.querySelector('#modal-items-table tbody');
       tbody.innerHTML = '';
 
-      let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, total: log.total }];
+      let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost, total: log.total }];
       items.forEach(i => {
         tbody.innerHTML += `
           <tr>
@@ -1136,7 +1168,7 @@
       let due = total - paid;
 
       document.getElementById('modal-summary-box').innerHTML = `
-        ${misc ? `<div>Misc Charges: ₹${misc.toFixed(2)}</div>` : ''}
+        ${misc ? `<div>Freight / Misc Charges: ₹${misc.toFixed(2)}</div>` : ''}
         <div><b>Grand Total: ₹${total.toFixed(2)}</b></div>
         <div>Paid: ₹${paid.toFixed(2)}</div>
         <div style="color: red; font-weight: bold;">Due: ₹${due.toFixed(2)}</div>
@@ -1156,6 +1188,15 @@
       document.getElementById('edit-log-id').value = logId;
       document.getElementById('edit-party').value = log.party;
       document.getElementById('edit-paid').value = log.paid;
+
+      let miscWrap = document.getElementById('edit-misc-wrap');
+      if(log.type.includes('PURCHASE')) {
+        miscWrap.classList.remove('hidden');
+        document.getElementById('edit-misc').value = log.miscCharges || 0;
+      } else {
+        miscWrap.classList.add('hidden');
+        document.getElementById('edit-misc').value = 0;
+      }
 
       let container = document.getElementById('edit-items-container');
       container.innerHTML = '';
@@ -1195,40 +1236,54 @@
 
       let party = document.getElementById('edit-party').value;
       let paid = parseFloat(document.getElementById('edit-paid').value) || 0;
+      let newMisc = parseFloat(document.getElementById('edit-misc').value) || 0;
 
       let names = document.querySelectorAll('.edit-item-name');
       let qtys = document.querySelectorAll('.edit-item-qty');
       let rates = document.querySelectorAll('.edit-item-rate');
 
       let newItems = [];
-      let newTotal = 0;
+      let itemsTotal = 0;
 
       for (let idx = 0; idx < names.length; idx++) {
         let n = names[idx].value;
         let q = parseInt(qtys[idx].value) || 0;
         let r = parseFloat(rates[idx].value) || 0;
         let t = q * r;
-        newTotal += t;
+        itemsTotal += t;
 
         if(log.type.includes('PURCHASE')) {
           newItems.push({ name: n, qty: q, cost: r, total: t });
-          let existing = allItems.find(i => i.name.toLowerCase() === n.toLowerCase());
-          if(existing) {
-            await rtdb.ref("items/" + existing.key).update({ purchaseRate: r });
-          }
         } else {
           newItems.push({ name: n, qty: q, rate: r, total: t });
         }
       }
 
-      let misc = log.miscCharges || 0;
-      newTotal += misc;
+      if (log.type.includes('PURCHASE')) {
+        for (let idx = 0; idx < newItems.length; idx++) {
+          let item = newItems[idx];
+          let allocatedFreightPerUnit = 0;
+          if (newMisc > 0 && itemsTotal > 0) {
+            let itemShareOfFreight = (item.total / itemsTotal) * newMisc;
+            allocatedFreightPerUnit = itemShareOfFreight / item.qty;
+          }
+          let effectiveUnitCost = item.cost + allocatedFreightPerUnit;
+
+          let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+          if(existing) {
+            await rtdb.ref("items/" + existing.key).update({ purchaseRate: effectiveUnitCost });
+          }
+        }
+      }
+
+      let grandTotal = itemsTotal + (log.type.includes('PURCHASE') ? newMisc : 0);
 
       await rtdb.ref("logs/" + logId).update({
         party: party,
         paid: paid,
         items: newItems,
-        total: newTotal
+        miscCharges: newMisc,
+        total: grandTotal
       });
 
       closeEditModal();
