@@ -41,7 +41,6 @@
     .text-green { color: #16a34a; }
     .text-red { color: #dc2626; }
     .text-blue { color: #2563eb; }
-    .text-yellow { color: #d97706; }
 
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8rem; }
     th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #e5e7eb; }
@@ -61,8 +60,6 @@
     /* Modal Overlay */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
     .modal-card { background: white; width: 90%; max-width: 550px; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 85vh; overflow-y: auto; }
-    
-    .item-subrow { background-color: #f8fafc; font-size: 0.75rem; color: #475569; }
     .summary-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 6px; margin-top: 10px; }
   </style>
 </head>
@@ -77,7 +74,7 @@
     <button class="tab-btn" onclick="switchTab('lookup', this)">Directory</button>
     <button class="tab-btn" onclick="switchTab('accounts', this)">Ledger</button>
     <button class="tab-btn" onclick="switchTab('history', this)">Invoices</button>
-    <button class="tab-btn" onclick="switchTab('stock', this)">Stock</button>
+    <button class="tab-btn" onclick="switchTab('stock', this)">Stock & Profit</button>
     <button class="tab-btn" onclick="switchTab('daily', this)">Daily Trends</button>
     <button class="tab-btn" onclick="switchTab('cashflow', this)">Cash Flow</button>
     <button class="tab-btn" onclick="switchTab('restock', this)">Restock & Fast</button>
@@ -561,23 +558,25 @@
     let customersList = [];
     let suppliersList = [];
 
-    // Helper: Lookup item purchase rate dynamically across all data sources
+    // Enhanced Helper: Reliable Cost Retrieval across Catalog and Logs
     function getItemPurchaseCost(itemName) {
       if (!itemName) return 0;
+      let cleanName = itemName.trim().toLowerCase();
 
-      // 1. Check item catalog entry
-      let catalogItem = allItems.find(i => i.name && i.name.toLowerCase() === itemName.toLowerCase());
-      if (catalogItem && catalogItem.purchaseRate && catalogItem.purchaseRate > 0) {
-        return catalogItem.purchaseRate;
+      // 1. Search Catalog
+      let catalogItem = allItems.find(i => i.name && i.name.trim().toLowerCase() === cleanName);
+      if (catalogItem && catalogItem.purchaseRate !== undefined && catalogItem.purchaseRate !== null && parseFloat(catalogItem.purchaseRate) > 0) {
+        return parseFloat(catalogItem.purchaseRate);
       }
 
-      // 2. Scan purchase logs for the most recent recorded purchase cost for this item
+      // 2. Scan Purchase Logs
       for (let i = allLogs.length - 1; i >= 0; i--) {
         let log = allLogs[i];
         if (log.type === 'PURCHASE' && log.items) {
-          let matchedItem = log.items.find(it => it.name && it.name.toLowerCase() === itemName.toLowerCase());
-          if (matchedItem && (matchedItem.cost || matchedItem.rate)) {
-            return parseFloat(matchedItem.cost || matchedItem.rate) || 0;
+          let matchedItem = log.items.find(it => it.name && it.name.trim().toLowerCase() === cleanName);
+          if (matchedItem) {
+            let costVal = parseFloat(matchedItem.cost || matchedItem.rate || 0);
+            if (costVal > 0) return costVal;
           }
         }
       }
@@ -652,7 +651,6 @@
         }
       });
 
-      // Also parse payments
       allPayments.forEach(p => {
         if(!p.party) return;
         let partyTrimmed = p.party.trim();
@@ -698,7 +696,6 @@
       return existingMatch || trimmed;
     }
 
-    // Dynamic Stock Engine factoring Returns
     function calculateStockForItem(itemName) {
       let item = allItems.find(i => i.name.toLowerCase() === itemName.toLowerCase());
       let opening = item ? (item.openingStock || 0) : 0;
@@ -872,22 +869,22 @@
       let grandTotal = itemsTotal + misc;
       let type = isReturn ? 'PURCHASE_RETURN' : 'PURCHASE';
 
-      // 1. Sync catalog items and ensure purchase rates are stored
+      // 1. Sync catalog items and save purchase rates directly
       for (let item of purchaseCart) {
         let existing = allItems.find(i => i.name.toLowerCase() === item.name.toLowerCase());
         if(existing) {
           await rtdb.ref("items/" + existing.key).update({
             category: item.category,
-            purchaseRate: item.cost,
-            sellingPrice: item.sell || existing.sellingPrice || 0
+            purchaseRate: parseFloat(item.cost) || 0,
+            sellingPrice: parseFloat(item.sell) || existing.sellingPrice || 0
           });
         } else {
           await rtdb.ref("items").push({
             name: item.name,
             category: item.category,
             openingStock: item.opening,
-            purchaseRate: item.cost,
-            sellingPrice: item.sell
+            purchaseRate: parseFloat(item.cost) || 0,
+            sellingPrice: parseFloat(item.sell) || 0
           });
         }
       }
@@ -928,12 +925,12 @@
 
       filtered.forEach(item => {
         let stock = calculateStockForItem(item.name);
-        let pRate = item.purchaseRate || getItemPurchaseCost(item.name);
+        let pRate = getItemPurchaseCost(item.name);
         tbody.innerHTML += `
           <tr>
             <td><b>${item.name}</b><br><small style="color:#6b7280">${item.category || 'General'}</small></td>
             <td><b>${stock.closing}</b></td>
-            <td>₹${pRate.toFixed(2)}</td>
+            <td class="text-blue"><b>₹${pRate.toFixed(2)}</b></td>
             <td>₹${(item.sellingPrice || 0).toFixed(2)}</td>
           </tr>
         `;
@@ -958,7 +955,6 @@
 
     function renderPartyStatement() {
       let party = document.getElementById('acc-party').value;
-      let type = document.getElementById('acc-type').value;
       let tbody = document.querySelector('#party-table tbody');
       tbody.innerHTML = '';
 
@@ -1024,16 +1020,10 @@
           </tr>
         `;
 
-        if(item.type === 'SALE') {
+        if(item.type === 'SALE' || item.type === 'PURCHASE') {
           totalBill += item.amount;
           totalPaid += item.paid;
-        } else if(item.type === 'SALE_RETURN') {
-          totalBill -= item.amount;
-          totalPaid -= item.paid;
-        } else if(item.type === 'PURCHASE') {
-          totalBill += item.amount;
-          totalPaid += item.paid;
-        } else if(item.type === 'PURCHASE_RETURN') {
+        } else if(item.type === 'SALE_RETURN' || item.type === 'PURCHASE_RETURN') {
           totalBill -= item.amount;
           totalPaid -= item.paid;
         } else if(item.type === 'PAYMENT') {
@@ -1171,7 +1161,7 @@
       container.innerHTML = '';
 
       let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
-      items.forEach((item, idx) => {
+      items.forEach((item) => {
         let rateVal = item.rate || item.cost || 0;
         container.innerHTML += `
           <div style="margin-top: 8px; padding: 8px; background: #f9fafb; border-radius: 6px;">
@@ -1183,7 +1173,7 @@
                 <input type="number" class="edit-item-qty" value="${item.qty}">
               </div>
               <div style="flex: 1;">
-                <label style="margin:0;">Rate (₹)</label>
+                <label style="margin:0;">Rate / Cost (₹)</label>
                 <input type="number" class="edit-item-rate" value="${rateVal}">
               </div>
             </div>
@@ -1222,7 +1212,6 @@
 
         if(log.type.includes('PURCHASE')) {
           newItems.push({ name: n, qty: q, cost: r, total: t });
-          // Update item catalog purchase rate
           let existing = allItems.find(i => i.name.toLowerCase() === n.toLowerCase());
           if(existing) {
             await rtdb.ref("items/" + existing.key).update({ purchaseRate: r });
@@ -1267,7 +1256,6 @@
           let catalogItem = allItems.find(c => c.name && c.name.toLowerCase() === (i.name || '').toLowerCase());
           let category = catalogItem ? (catalogItem.category || 'General') : 'General';
           
-          // Fixed COGS resolution using fallback helper
           let costRate = getItemPurchaseCost(i.name);
           let q = parseInt(i.qty) || 0;
 
@@ -1296,7 +1284,6 @@
         });
       });
 
-      // Overall Profits
       let grossProfit = netSales - totalCOGS;
 
       document.getElementById('stat-sales').textContent = `₹${netSales.toFixed(2)}`;
@@ -1324,7 +1311,7 @@
         `;
       });
 
-      // Category Stock Qty Table
+      // Category Stock Summary
       allItems.forEach(i => {
         let cat = i.category || 'General';
         let stock = calculateStockForItem(i.name);
@@ -1360,7 +1347,6 @@
       });
     }
 
-    // Helper: Normalize date strings to standard YYYY-MM-DD key for proper grouping and sorting
     function normalizeDateToISO(dateStr) {
       if (!dateStr) return '';
       if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
@@ -1391,7 +1377,7 @@
     }
 
     function renderDailyTrends() {
-      let filter = document.getElementById('daily-date-filter').value; // YYYY-MM-DD
+      let filter = document.getElementById('daily-date-filter').value;
       let tbody = document.getElementById('daily-trends-table-body');
       tbody.innerHTML = '';
 
@@ -1408,7 +1394,6 @@
         let items = log.items || [{ name: log.item, qty: log.qty, rate: log.rate, cost: log.cost }];
 
         items.forEach(i => {
-          // Fixed COGS resolution using fallback helper
           let costRate = getItemPurchaseCost(i.name);
           let q = parseInt(i.qty) || 0;
 
@@ -1481,7 +1466,6 @@
       document.getElementById('cf-out').textContent = `₹${cashOut.toFixed(2)}`;
       document.getElementById('cf-net').textContent = `₹${netCash.toFixed(2)}`;
 
-      // Outstanding metrics
       let totalReceivables = 0;
       let totalPayables = 0;
 
@@ -1499,7 +1483,7 @@
       document.getElementById('cf-pending-pay').textContent = `₹${totalPayables.toFixed(2)}`;
     }
 
-    function calculatePartyBalance(partyName, type) {
+    function calculatePartyBalance(partyName) {
       let totalBill = 0;
       let totalPaid = 0;
 
@@ -1524,7 +1508,6 @@
     }
 
     function renderRestockAndFast() {
-      // 1. Fast moving
       let itemSalesMap = {};
 
       allLogs.forEach(log => {
@@ -1564,7 +1547,6 @@
         `;
       });
 
-      // 2. Restock Needed
       let restockTbody = document.getElementById('restock-table-body');
       restockTbody.innerHTML = '';
 
